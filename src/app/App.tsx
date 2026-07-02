@@ -190,6 +190,33 @@ const clampPct = (value: number) => Math.max(0, Math.min(30, value));
 
 const calcFees = (total: number, feePct: number) => Math.round(total * (clampPct(feePct) / 100));
 
+const PROPERTIES_STORAGE_KEY = "sonapie:properties";
+const MAX_PROPERTY_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_PROPERTY_IMAGES = 6;
+
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    if (file.size > MAX_PROPERTY_IMAGE_BYTES) {
+      reject(new Error("too_large"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("read_failed"));
+    reader.readAsDataURL(file);
+  });
+
+const loadStoredProperties = (): Property[] => {
+  try {
+    const raw = localStorage.getItem(PROPERTIES_STORAGE_KEY);
+    if (!raw) return INITIAL_PROPERTIES;
+    const parsed = JSON.parse(raw) as Property[];
+    return Array.isArray(parsed) && parsed.length ? parsed : INITIAL_PROPERTIES;
+  } catch {
+    return INITIAL_PROPERTIES;
+  }
+};
+
 const matchCapacity = (capacity: number, filter: string) => {
   if (!filter) return true;
   if (filter.includes("1-5")) return capacity <= 5;
@@ -2824,25 +2851,30 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
   const [form, setForm] = useState(emptyForm);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
-  const uploadedObjectUrlsRef = useRef<string[]>([]);
+  const [uploading, setUploading] = useState(false);
 
-  const cleanupObjectUrls = () => {
-    uploadedObjectUrlsRef.current.forEach((u) => {
-      try { URL.revokeObjectURL(u); } catch { /* ignore */ }
-    });
-    uploadedObjectUrlsRef.current = [];
-  };
-
-  const applyUploads = (files: File[]) => {
-    const images = files.filter(f => f.type.startsWith("image/"));
+  const applyUploads = async (files: File[]) => {
+    const images = files.filter(f => f.type.startsWith("image/")).slice(0, MAX_PROPERTY_IMAGES);
     if (!images.length) {
       notify("Veuillez sélectionner des images (PNG/JPG/WebP)");
       return;
     }
-    cleanupObjectUrls();
-    const urls = images.map(f => URL.createObjectURL(f));
-    uploadedObjectUrlsRef.current = urls;
-    setUploadedUrls(urls);
+    setUploading(true);
+    const urls: string[] = [];
+    for (const file of images) {
+      try {
+        urls.push(await fileToDataUrl(file));
+      } catch (err) {
+        if (err instanceof Error && err.message === "too_large") {
+          notify(`Image trop volumineuse (max 2 Mo) : ${file.name}`);
+        } else {
+          notify(`Impossible de charger : ${file.name}`);
+        }
+      }
+    }
+    if (urls.length) setUploadedUrls(urls);
+    setUploading(false);
+    if (uploadInputRef.current) uploadInputRef.current.value = "";
   };
 
   const filtered = properties.filter(p =>
@@ -2852,18 +2884,13 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
 
   const openEdit = (p: Property) => {
     setForm({ name: p.name, type: p.type, city: p.city, price: p.price, capacity: p.capacity, area: p.area, description: p.description });
-    cleanupObjectUrls();
     setUploadedUrls(p.gallery?.length ? p.gallery : (p.images?.length ? p.images : [p.image].filter(Boolean)));
     setEditProp(p);
     setShowAdd(true);
   };
 
   useEffect(() => {
-    if (!showAdd) {
-      cleanupObjectUrls();
-      setUploadedUrls([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!showAdd) setUploadedUrls([]);
   }, [showAdd]);
 
   const saveProperty = () => {
@@ -2873,6 +2900,10 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
     }
     if (form.price <= 0 || Number.isNaN(form.price)) {
       notify("Veuillez renseigner un prix valide");
+      return;
+    }
+    if (!editProp && !uploadedUrls.length) {
+      notify("Veuillez ajouter au moins une photo du bien");
       return;
     }
     if (editProp) {
@@ -2893,9 +2924,8 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
       }));
       notify("Bien modifié avec succès");
     } else {
-      const fallbackImage = properties[0]?.image || "";
-      const imgs = uploadedUrls.length ? uploadedUrls : [fallbackImage].filter(Boolean);
-      const main = imgs[0] || fallbackImage;
+      const imgs = uploadedUrls;
+      const main = imgs[0];
       const newProp: Property = {
         id: String(Date.now()),
         ...form,
@@ -3005,8 +3035,8 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
                 }}
               >
                 <Upload size={22} className="mx-auto mb-2 opacity-50" />
-                Glissez vos photos ici ou cliquez pour uploader
-                <div className="text-xs text-muted-foreground mt-1.5">Formats: PNG/JPG/WebP — max conseillé: 6 images</div>
+                {uploading ? "Chargement des photos…" : "Glissez vos photos ici ou cliquez pour uploader"}
+                <div className="text-xs text-muted-foreground mt-1.5">PNG/JPG/WebP — max {MAX_PROPERTY_IMAGES} images, 2 Mo chacune</div>
               </div>
               {uploadedUrls.length > 0 && (
                 <div className="grid grid-cols-4 gap-2">
@@ -3020,7 +3050,7 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
                   ))}
                   <button
                     type="button"
-                    onClick={() => { cleanupObjectUrls(); setUploadedUrls([]); if (uploadInputRef.current) uploadInputRef.current.value = ""; }}
+                    onClick={() => { setUploadedUrls([]); if (uploadInputRef.current) uploadInputRef.current.value = ""; }}
                     className="col-span-4 text-xs text-red-600 hover:underline text-left"
                   >
                     Retirer les photos
@@ -3979,7 +4009,7 @@ export default function App() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [catalogueFilters, setCatalogueFilters] = useState<CatalogueFilters>(DEFAULT_FILTERS);
   const [reservations, setReservations] = useState<Reservation[]>(MOCK_RESERVATIONS);
-  const [properties, setProperties] = useState<Property[]>(INITIAL_PROPERTIES);
+  const [properties, setProperties] = useState<Property[]>(loadStoredProperties);
   const [adminUsers, setAdminUsers] = useState<MockUser[]>(MOCK_USERS);
   const [maintenanceTickets, setMaintenanceTickets] = useState<MaintenanceTicket[]>(INITIAL_MAINTENANCE_TICKETS);
   const [adminClaims, setAdminClaims] = useState<AdminClaim[]>(INITIAL_ADMIN_CLAIMS);
@@ -4000,6 +4030,14 @@ export default function App() {
       // ignore
     }
   }, [platformSettings]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROPERTIES_STORAGE_KEY, JSON.stringify(properties));
+    } catch {
+      notify("Stockage local plein — réduisez la taille des photos");
+    }
+  }, [properties]);
 
   const toggleFavorite = (id: string) => {
     setFavorites(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
