@@ -2,43 +2,44 @@
 
 :root {
   --font-size: 16px;
-  --background: #F8F7F4;
+  /* Côte d’Ivoire-inspired palette (orange / blanc / vert) */
+  --background: #FFFFFF;
   --foreground: #1A1A2E;
   --card: #FFFFFF;
   --card-foreground: #1A1A2E;
   --popover: #FFFFFF;
   --popover-foreground: #1A1A2E;
-  --primary: #EA580C;
+  --primary: #F57C00;
   --primary-foreground: #FFFFFF;
-  --secondary: #16A34A;
+  --secondary: #009E49;
   --secondary-foreground: #FFFFFF;
-  --muted: #F0EDE8;
+  --muted: #F5F6F8;
   --muted-foreground: #6B7280;
-  --accent: #16A34A;
+  --accent: #009E49;
   --accent-foreground: #FFFFFF;
   --destructive: #DC2626;
   --destructive-foreground: #FFFFFF;
   --border: rgba(26, 26, 46, 0.1);
   --input: transparent;
-  --input-background: #F3F0EB;
+  --input-background: #F3F4F6;
   --switch-background: #D1D5DB;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #EA580C;
-  --chart-1: #EA580C;
-  --chart-2: #16A34A;
-  --chart-3: #15803D;
+  --ring: #F57C00;
+  --chart-1: #F57C00;
+  --chart-2: #009E49;
+  --chart-3: #0B7A3C;
   --chart-4: #D97706;
   --chart-5: #4ADE80;
   --radius: 0.5rem;
   --sidebar: #14261A;
   --sidebar-foreground: #F8F7F4;
-  --sidebar-primary: #EA580C;
+  --sidebar-primary: #F57C00;
   --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: #1E3D2A;
   --sidebar-accent-foreground: #F8F7F4;
   --sidebar-border: rgba(248, 247, 244, 0.1);
-  --sidebar-ring: #EA580C;
+  --sidebar-ring: #F57C00;
 }
 
 .dark {

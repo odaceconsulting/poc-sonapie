@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { PropertyMap } from "./components/PropertyMap";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
@@ -178,6 +179,16 @@ const DEFAULT_FILTERS: CatalogueFilters = {
 };
 
 const fmt = (n: number) => new Intl.NumberFormat("fr-CI").format(n) + " FCFA";
+
+type PlatformSettings = {
+  platformName: string;
+  email: string;
+  feePct: number;
+};
+
+const clampPct = (value: number) => Math.max(0, Math.min(30, value));
+
+const calcFees = (total: number, feePct: number) => Math.round(total * (clampPct(feePct) / 100));
 
 const matchCapacity = (capacity: number, filter: string) => {
   if (!filter) return true;
@@ -1239,13 +1250,14 @@ const CataloguePage = ({ navigate, filters, setFilters, favorites, toggleFavorit
 };
 
 // ── Property Detail ────────────────────────────────────────────────────────────
-const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, toggleFavorite, allProperties }: {
+const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, toggleFavorite, allProperties, feePct }: {
   navigate: (p: Page, d?: any) => void;
   property: Property;
   setBookingData: (d: any) => void;
   favorites: string[];
   toggleFavorite: (id: string) => void;
   allProperties: Property[];
+  feePct: number;
 }) => {
   const [currentImg, setCurrentImg] = useState(0);
   const isFav = favorites.includes(prop.id);
@@ -1259,10 +1271,10 @@ const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, tog
     ? Math.max(0, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000))
     : 0;
   const total = nights * prop.price;
-  const fees = Math.round(total * 0.05);
+  const fees = calcFees(total, feePct);
 
   const handleBook = () => {
-    setBookingData({ property: prop, checkIn, checkOut, guests, nights, total, fees });
+    setBookingData({ property: prop, checkIn, checkOut, guests, nights, total, fees, feePct: clampPct(feePct), grandTotal: total + fees });
     navigate("booking-dates", { property: prop });
   };
 
@@ -1505,7 +1517,7 @@ const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, tog
                       <span className="font-medium">{fmt(total)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Frais de service (5%)</span>
+                      <span className="text-muted-foreground">Frais de service ({clampPct(feePct)}%)</span>
                       <span className="font-medium">{fmt(fees)}</span>
                     </div>
                     <div className="border-t border-border pt-2 flex justify-between font-bold text-foreground">
@@ -1563,21 +1575,22 @@ const BookingSteps = ({ current }: { current: number }) => {
   );
 };
 
-const BookingDatesPage = ({ navigate, property: prop, bookingData, setBookingData }: {
+const BookingDatesPage = ({ navigate, property: prop, bookingData, setBookingData, feePct }: {
   navigate: (p: Page, d?: any) => void;
   property: Property;
   bookingData: any;
   setBookingData: (d: any) => void;
+  feePct: number;
 }) => {
   const [checkIn, setCheckIn] = useState(bookingData.checkIn || "");
   const [checkOut, setCheckOut] = useState(bookingData.checkOut || "");
   const [guests, setGuests] = useState(bookingData.guests || 2);
   const nights = checkIn && checkOut ? Math.max(0, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000)) : 0;
   const total = nights * prop.price;
-  const fees = Math.round(total * 0.05);
+  const fees = calcFees(total, feePct);
 
   const handleNext = () => {
-    setBookingData({ ...bookingData, property: prop, checkIn, checkOut, guests, nights, total, fees, grandTotal: total + fees });
+    setBookingData({ ...bookingData, property: prop, checkIn, checkOut, guests, nights, total, fees, feePct: clampPct(feePct), grandTotal: total + fees });
     navigate("booking-info");
   };
 
@@ -1615,7 +1628,7 @@ const BookingDatesPage = ({ navigate, property: prop, bookingData, setBookingDat
           <h3 className="font-semibold text-foreground mb-3">Récapitulatif du prix</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">{fmt(prop.price)} × {nights} nuit{nights > 1 ? "s" : ""}</span><span>{fmt(total)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Frais de service (5%)</span><span>{fmt(fees)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Frais de service ({clampPct(feePct)}%)</span><span>{fmt(fees)}</span></div>
             <div className="flex justify-between font-bold text-foreground border-t border-primary/20 pt-2 mt-2">
               <span>Total estimé</span><span className="text-primary text-lg">{fmt(total + fees)}</span>
             </div>
@@ -1728,6 +1741,7 @@ const BookingInfoPage = ({ navigate, bookingData, setBookingData }: {
 
 const BookingSummaryPage = ({ navigate, bookingData }: { navigate: (p: Page) => void; bookingData: any }) => {
   const bd = bookingData;
+  const pct = typeof bd.feePct === "number" ? clampPct(bd.feePct) : 5;
   return (
     <div className="max-w-2xl mx-auto px-6 py-10">
       <BookingSteps current={3} />
@@ -1775,7 +1789,7 @@ const BookingSummaryPage = ({ navigate, bookingData }: { navigate: (p: Page) => 
           <h3 className="font-semibold text-foreground mb-3">Détail du prix</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">{fmt(bd.property?.price || 0)} × {bd.nights || 0} nuit{(bd.nights || 0) > 1 ? "s" : ""}</span><span>{fmt(bd.total || 0)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Frais de service</span><span>{fmt(bd.fees || 0)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Frais de service ({pct}%)</span><span>{fmt(bd.fees || 0)}</span></div>
             <div className="border-t border-primary/20 pt-2 mt-2 flex justify-between font-bold text-foreground">
               <span>Total à payer</span><span className="text-primary text-lg">{fmt(bd.grandTotal || 0)}</span>
             </div>
@@ -1813,6 +1827,7 @@ const BookingPaymentPage = ({ navigate, bookingData, setBookingData }: {
     { id: "orange-money", label: "Orange Money", emoji: "🟠", color: "border-orange-400 bg-orange-50" },
     { id: "mtn-money", label: "MTN Money", emoji: "🟡", color: "border-yellow-400 bg-yellow-50" },
     { id: "wave", label: "Wave", emoji: "🟢", color: "border-green-400 bg-green-50" },
+    { id: "tresor-pay", label: "Trésor Pay", emoji: "🇨🇮", color: "border-secondary bg-secondary/10" },
     { id: "card", label: "Carte bancaire", emoji: "💳", color: "border-purple-400 bg-purple-50" },
     { id: "admin", label: "Paiement administratif", emoji: "🏛️", color: "border-orange-400 bg-orange-50" },
   ];
@@ -1848,7 +1863,7 @@ const BookingPaymentPage = ({ navigate, bookingData, setBookingData }: {
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-5 mb-6">
-        {method !== "card" && method !== "admin" ? (
+        {method !== "card" && method !== "admin" && method !== "tresor-pay" ? (
           <div>
             <label className="text-sm font-semibold text-foreground block mb-2">
               Numéro {method === "orange-money" ? "Orange" : method === "mtn-money" ? "MTN" : "Wave"}
@@ -1860,6 +1875,17 @@ const BookingPaymentPage = ({ navigate, bookingData, setBookingData }: {
             </div>
             <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-800">
               <strong>Instruction :</strong> Vous recevrez une demande de confirmation sur votre téléphone. Approuvez le paiement de {fmt(bookingData.grandTotal || 0)}.
+            </div>
+          </div>
+        ) : method === "tresor-pay" ? (
+          <div className="space-y-3">
+            <div className="bg-secondary/10 border border-secondary/20 rounded-xl p-4 text-sm text-foreground">
+              <strong>Trésor Pay :</strong> moyen de paiement institutionnel du Gouvernement. Utilisez cette option pour les paiements via le circuit du Trésor Public.
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-foreground block mb-1.5">Référence Trésor Pay</label>
+              <input placeholder="TP-2026-XXXX" className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary" />
+              <p className="text-xs text-muted-foreground mt-1.5">Démo : une référence/notification de paiement pourra être demandée.</p>
             </div>
           </div>
         ) : method === "admin" ? (
@@ -1952,7 +1978,12 @@ const BookingConfirmationPage = ({ navigate, bookingData, setReservations, user 
     }
   }, [bookingData.ref]);
   const methodLabels: Record<string, string> = {
-    "orange-money": "Orange Money", "mtn-money": "MTN Money", "wave": "Wave", "card": "Carte bancaire", "admin": "Paiement administratif"
+    "orange-money": "Orange Money",
+    "mtn-money": "MTN Money",
+    "wave": "Wave",
+    "tresor-pay": "Trésor Pay",
+    "card": "Carte bancaire",
+    "admin": "Paiement administratif"
   };
 
   return (
@@ -2791,6 +2822,28 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const emptyForm = { name: "", type: "Villa", city: "Abidjan", price: 100000, capacity: 10, area: 200, description: "" };
   const [form, setForm] = useState(emptyForm);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
+  const uploadedObjectUrlsRef = useRef<string[]>([]);
+
+  const cleanupObjectUrls = () => {
+    uploadedObjectUrlsRef.current.forEach((u) => {
+      try { URL.revokeObjectURL(u); } catch { /* ignore */ }
+    });
+    uploadedObjectUrlsRef.current = [];
+  };
+
+  const applyUploads = (files: File[]) => {
+    const images = files.filter(f => f.type.startsWith("image/"));
+    if (!images.length) {
+      notify("Veuillez sélectionner des images (PNG/JPG/WebP)");
+      return;
+    }
+    cleanupObjectUrls();
+    const urls = images.map(f => URL.createObjectURL(f));
+    uploadedObjectUrlsRef.current = urls;
+    setUploadedUrls(urls);
+  };
 
   const filtered = properties.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -2799,20 +2852,67 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
 
   const openEdit = (p: Property) => {
     setForm({ name: p.name, type: p.type, city: p.city, price: p.price, capacity: p.capacity, area: p.area, description: p.description });
+    cleanupObjectUrls();
+    setUploadedUrls(p.gallery?.length ? p.gallery : (p.images?.length ? p.images : [p.image].filter(Boolean)));
     setEditProp(p);
     setShowAdd(true);
   };
 
+  useEffect(() => {
+    if (!showAdd) {
+      cleanupObjectUrls();
+      setUploadedUrls([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAdd]);
+
   const saveProperty = () => {
-    if (!form.name.trim()) return;
+    if (!form.name.trim()) {
+      notify("Veuillez renseigner le nom du bien");
+      return;
+    }
+    if (form.price <= 0 || Number.isNaN(form.price)) {
+      notify("Veuillez renseigner un prix valide");
+      return;
+    }
     if (editProp) {
-      setProperties(prev => prev.map(p => p.id === editProp.id ? { ...p, ...form } : p));
+      setProperties(prev => prev.map(p => {
+        if (p.id !== editProp.id) return p;
+        const imgs = uploadedUrls.length ? uploadedUrls : (p.gallery?.length ? p.gallery : p.images);
+        const main = imgs?.[0] || p.mainImage || p.image;
+        return {
+          ...p,
+          ...form,
+          image: main,
+          mainImage: main,
+          images: imgs?.length ? imgs : p.images,
+          gallery: imgs?.length ? imgs : p.gallery,
+          location: `${form.city}, Côte d'Ivoire`,
+          isSonapieManaged: true,
+        };
+      }));
       notify("Bien modifié avec succès");
     } else {
+      const fallbackImage = properties[0]?.image || "";
+      const imgs = uploadedUrls.length ? uploadedUrls : [fallbackImage].filter(Boolean);
+      const main = imgs[0] || fallbackImage;
       const newProp: Property = {
-        id: String(Date.now()), ...form, lat: 5.3, lng: -4.0,
-        rating: 4.5, reviews: 0, image: properties[0]?.image || "", images: [properties[0]?.image || ""],
-        amenities: ["Wi-Fi", "Climatisation"], bedrooms: 2, bathrooms: 1,
+        id: String(Date.now()),
+        ...form,
+        lat: 5.3,
+        lng: -4.0,
+        rating: 4.5,
+        reviews: 0,
+        image: main,
+        mainImage: main,
+        images: imgs,
+        gallery: imgs,
+        location: `${form.city}, Côte d'Ivoire`,
+        isSonapieManaged: true,
+        amenities: ["Wi-Fi", "Climatisation"],
+        services: ["Réception 24h/24"],
+        bedrooms: 2,
+        bathrooms: 1,
         available: true, featured: false,
       };
       setProperties(prev => [...prev, newProp]);
@@ -2821,6 +2921,7 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
     setShowAdd(false);
     setEditProp(null);
     setForm(emptyForm);
+    setUploadedUrls([]);
   };
 
   const confirmDelete = () => {
@@ -2882,10 +2983,50 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
               </div>
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description..." rows={3}
                 className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none resize-none" />
-              <div className="border-2 border-dashed border-border rounded-xl p-6 text-center text-sm text-muted-foreground hover:bg-muted cursor-pointer transition-colors">
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => applyUploads(Array.from(e.target.files || []))}
+              />
+              <div
+                className="border-2 border-dashed border-border rounded-xl p-6 text-center text-sm text-muted-foreground hover:bg-muted cursor-pointer transition-colors"
+                role="button"
+                tabIndex={0}
+                onClick={() => uploadInputRef.current?.click()}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") uploadInputRef.current?.click(); }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  applyUploads(Array.from(e.dataTransfer.files || []));
+                }}
+              >
                 <Upload size={22} className="mx-auto mb-2 opacity-50" />
                 Glissez vos photos ici ou cliquez pour uploader
+                <div className="text-xs text-muted-foreground mt-1.5">Formats: PNG/JPG/WebP — max conseillé: 6 images</div>
               </div>
+              {uploadedUrls.length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {uploadedUrls.slice(0, 8).map((u, idx) => (
+                    <div key={`${u}-${idx}`} className="relative">
+                      <img src={u} alt={`upload-${idx}`} className="w-full h-16 object-cover rounded-lg border border-border bg-muted" />
+                      {idx === 0 && (
+                        <span className="absolute top-1 left-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">Cover</span>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { cleanupObjectUrls(); setUploadedUrls([]); if (uploadInputRef.current) uploadInputRef.current.value = ""; }}
+                    className="col-span-4 text-xs text-red-600 hover:underline text-left"
+                  >
+                    Retirer les photos
+                  </button>
+                </div>
+              )}
               <div className="flex gap-3 pt-1">
                 <button onClick={() => { setShowAdd(false); setEditProp(null); }} className="flex-1 border border-border py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors">Annuler</button>
                 <button onClick={saveProperty} className="flex-1 bg-primary text-white py-2.5 rounded-xl text-sm font-bold hover:bg-orange-700 transition-colors">{editProp ? "Enregistrer" : "Créer le bien"}</button>
@@ -3074,30 +3215,44 @@ const AdminReservationsPage = ({ reservations, setReservations, notify }: {
   );
 };
 
-const AdminSettingsPage = ({ notify }: { notify: NotifyFn }) => {
-  const [settings, setSettings] = useState({ platformName: APP_NAME, email: "info@sonapie.ci", fee: 5 });
+const AdminSettingsPage = ({ settings, setSettings, notify }: {
+  settings: PlatformSettings;
+  setSettings: (s: PlatformSettings | ((prev: PlatformSettings) => PlatformSettings)) => void;
+  notify: NotifyFn;
+}) => {
+  const [draft, setDraft] = useState<PlatformSettings>(settings);
+  useEffect(() => setDraft(settings), [settings]);
+
+  const save = () => {
+    setSettings({ ...draft, feePct: clampPct(draft.feePct) });
+    notify("Paramètres enregistrés");
+  };
   return (
   <div className="p-6 lg:p-8 space-y-6 max-w-2xl">
     <AdminPageHeader title="Paramètres" subtitle="Configuration de la plateforme" />
     <div className="bg-card border border-border rounded-2xl p-6 space-y-5 shadow-sm">
       <div>
         <label className="text-sm font-semibold text-foreground block mb-1.5">Nom de la plateforme</label>
-        <input value={settings.platformName} onChange={e => setSettings(s => ({ ...s, platformName: e.target.value }))}
+        <input value={draft.platformName} onChange={e => setDraft(s => ({ ...s, platformName: e.target.value }))}
           className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary" />
       </div>
       <div>
         <label className="text-sm font-semibold text-foreground block mb-1.5">Email de contact</label>
-        <input value={settings.email} onChange={e => setSettings(s => ({ ...s, email: e.target.value }))}
+        <input value={draft.email} onChange={e => setDraft(s => ({ ...s, email: e.target.value }))}
           className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary" />
       </div>
       <div>
         <label className="text-sm font-semibold text-foreground block mb-1.5">Frais de service (%)</label>
-        <input type="number" value={settings.fee} onChange={e => setSettings(s => ({ ...s, fee: +e.target.value }))}
+        <input type="number" value={draft.feePct} onChange={e => setDraft(s => ({ ...s, feePct: clampPct(+e.target.value) }))}
           className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        <p className="text-xs text-muted-foreground mt-1.5">Appliqué aux réservations (démo) — de 0 à 30%.</p>
       </div>
-      <button onClick={() => notify("Paramètres enregistrés")} className="bg-primary text-white font-bold px-6 py-2.5 rounded-xl hover:bg-orange-700 transition-colors text-sm shadow-md shadow-primary/20">
-        Enregistrer les paramètres
-      </button>
+      <div className="flex gap-3 pt-1">
+        <button onClick={() => setDraft(settings)} className="flex-1 border border-border py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors">Annuler</button>
+        <button onClick={save} className="flex-1 bg-primary text-white font-bold py-2.5 rounded-xl hover:bg-orange-700 transition-colors text-sm shadow-md shadow-primary/20">
+          Enregistrer
+        </button>
+      </div>
     </div>
   </div>
   );
@@ -3651,8 +3806,8 @@ const ContactPage = ({ navigate, complaints, setComplaints }: {
   const [message, setMessage] = useState("");
 
   const faqs = [
-    { q: "Comment réserver un bien SONAPIE ?", a: "Parcourez notre catalogue, sélectionnez le bien souhaité, choisissez vos dates et validez votre réservation en ligne. Le paiement peut se faire via Orange Money, MTN Money, Wave ou carte bancaire." },
-    { q: "Quels moyens de paiement sont acceptés ?", a: "Nous acceptons Orange Money, MTN Money, Wave, ainsi que les cartes bancaires Visa et Mastercard. Tous les paiements sont sécurisés via protocole SSL." },
+    { q: "Comment réserver un bien SONAPIE ?", a: "Parcourez notre catalogue, sélectionnez le bien souhaité, choisissez vos dates et validez votre réservation en ligne. Le paiement peut se faire via Orange Money, MTN Money, Wave, Trésor Pay ou carte bancaire." },
+    { q: "Quels moyens de paiement sont acceptés ?", a: "Nous acceptons Orange Money, MTN Money, Wave, Trésor Pay, ainsi que les cartes bancaires Visa et Mastercard. Tous les paiements sont sécurisés via protocole SSL." },
     { q: "Puis-je annuler ma réservation ?", a: "Oui. Les annulations effectuées plus de 72h avant l'arrivée donnent droit à un remboursement intégral. Les annulations tardives sont soumises à des pénalités selon nos CGU." },
     { q: "Comment contacter le service client ?", a: "Par téléphone au +225 27 20 25 00 00 (lun-ven 8h-18h), par email à contact@sonapie.ci, ou via le formulaire de contact ci-dessous. Temps de réponse moyen : 2h." },
     { q: "Les biens sont-ils adaptés aux personnes à mobilité réduite ?", a: "Certains de nos biens disposent d'aménagements PMR. Utilisez le filtre 'Accessibilité PMR' dans le catalogue ou contactez-nous pour connaître les options disponibles." },
@@ -3807,6 +3962,20 @@ export default function App() {
   const [pageData, setPageData] = useState<any>({});
   const [user, setUser] = useState<any>(null);
   const [bookingData, setBookingData] = useState<any>({});
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() => {
+    try {
+      const raw = localStorage.getItem("sonapie:settings");
+      if (!raw) return { platformName: APP_NAME, email: "info@sonapie.ci", feePct: 5 };
+      const parsed = JSON.parse(raw) as Partial<PlatformSettings>;
+      return {
+        platformName: parsed.platformName || APP_NAME,
+        email: parsed.email || "info@sonapie.ci",
+        feePct: clampPct(typeof parsed.feePct === "number" ? parsed.feePct : 5),
+      };
+    } catch {
+      return { platformName: APP_NAME, email: "info@sonapie.ci", feePct: 5 };
+    }
+  });
   const [favorites, setFavorites] = useState<string[]>([]);
   const [catalogueFilters, setCatalogueFilters] = useState<CatalogueFilters>(DEFAULT_FILTERS);
   const [reservations, setReservations] = useState<Reservation[]>(MOCK_RESERVATIONS);
@@ -3823,6 +3992,14 @@ export default function App() {
     setToast(message);
     setTimeout(() => setToast(null), 3200);
   };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("sonapie:settings", JSON.stringify(platformSettings));
+    } catch {
+      // ignore
+    }
+  }, [platformSettings]);
 
   const toggleFavorite = (id: string) => {
     setFavorites(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -3842,8 +4019,8 @@ export default function App() {
     switch (page) {
       case "home": return <HomePage navigate={navigate} filters={catalogueFilters} setFilters={setCatalogueFilters} favorites={favorites} toggleFavorite={toggleFavorite} properties={properties} />;
       case "catalogue": return <CataloguePage navigate={navigate} filters={catalogueFilters} setFilters={setCatalogueFilters} favorites={favorites} toggleFavorite={toggleFavorite} properties={properties} />;
-      case "property": return <PropertyPage navigate={navigate} property={currentProperty} setBookingData={setBookingData} favorites={favorites} toggleFavorite={toggleFavorite} allProperties={properties} />;
-      case "booking-dates": return <BookingDatesPage navigate={navigate} property={currentProperty} bookingData={bookingData} setBookingData={setBookingData} />;
+      case "property": return <PropertyPage navigate={navigate} property={currentProperty} setBookingData={setBookingData} favorites={favorites} toggleFavorite={toggleFavorite} allProperties={properties} feePct={platformSettings.feePct} />;
+      case "booking-dates": return <BookingDatesPage navigate={navigate} property={currentProperty} bookingData={bookingData} setBookingData={setBookingData} feePct={platformSettings.feePct} />;
       case "booking-info": return <BookingInfoPage navigate={navigate} bookingData={bookingData} setBookingData={setBookingData} />;
       case "booking-summary": return <BookingSummaryPage navigate={navigate} bookingData={bookingData} />;
       case "booking-payment": return <BookingPaymentPage navigate={navigate} bookingData={bookingData} setBookingData={setBookingData} />;
@@ -3869,7 +4046,7 @@ export default function App() {
       case "admin-maintenance": return <AdminMaintenancePage tickets={maintenanceTickets} setTickets={setMaintenanceTickets} notify={notify} />;
       case "admin-claims": return <AdminClaimsPage claims={adminClaims} setClaims={setAdminClaims} notify={notify} />;
       case "admin-stats": return <AdminStatsPage />;
-      case "admin-settings": return <AdminSettingsPage notify={notify} />;
+      case "admin-settings": return <AdminSettingsPage settings={platformSettings} setSettings={setPlatformSettings} notify={notify} />;
       case "about": return <AboutPage navigate={navigate} />;
       case "contact": return <ContactPage navigate={navigate} complaints={complaints} setComplaints={setComplaints} />;
       default: return <HomePage navigate={navigate} filters={catalogueFilters} setFilters={setCatalogueFilters} favorites={favorites} toggleFavorite={toggleFavorite} properties={properties} />;
