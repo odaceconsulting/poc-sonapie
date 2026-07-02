@@ -173,6 +173,80 @@ const CITY_DESTINATION_META: Record<string, { desc: string }> = {
   Katiola: { desc: "Région du Hambol" },
 };
 const AMENITY_FILTERS = ["Tous", "Piscine", "Wi-Fi", "Parking", "Climatisation", "Plage privée", "Accessibilité PMR"];
+const PROPERTY_AMENITY_OPTIONS = ["Wi-Fi", "Climatisation", "Piscine", "Parking", "Restauration", "Bar", "SPA", "Plage privée", "Accessibilité PMR"];
+const PROPERTY_SERVICE_OPTIONS = ["Réservation", "Restauration", "Bar", "SPA", "Salle de réunion", "Événementiel", "Réception 24h/24"];
+const PROPERTY_TAGS = ["Prestige", "Nouveau", "Promo", "Patrimoine"];
+const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
+  Abidjan: { lat: 5.3361, lng: -3.9883 },
+  Yamoussoukro: { lat: 6.8276, lng: -5.2893 },
+  Daoukro: { lat: 7.0597, lng: -3.9631 },
+  Séguéla: { lat: 7.9611, lng: -6.6731 },
+  Katiola: { lat: 8.1378, lng: -5.0994 },
+};
+
+type PropertyFormData = {
+  name: string;
+  type: string;
+  city: string;
+  location: string;
+  description: string;
+  price: number;
+  capacity: number;
+  bedrooms: number;
+  bathrooms: number;
+  area: number;
+  tag: string;
+  amenities: string[];
+  services: string[];
+  featured: boolean;
+  available: boolean;
+};
+
+const emptyPropertyForm = (): PropertyFormData => ({
+  name: "",
+  type: "Hôtel",
+  city: "Abidjan",
+  location: "",
+  description: "",
+  price: 75000,
+  capacity: 10,
+  bedrooms: 2,
+  bathrooms: 1,
+  area: 200,
+  tag: "",
+  amenities: ["Wi-Fi", "Climatisation"],
+  services: ["Réservation", "Réception 24h/24"],
+  featured: false,
+  available: true,
+});
+
+const inputClass = "w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-shadow";
+const selectClass = "w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-shadow";
+
+const AdminFormField = ({ label, hint, required, children }: { label: string; hint?: string; required?: boolean; children: ReactNode }) => (
+  <div>
+    <label className="text-sm font-semibold text-foreground block mb-1.5">
+      {label}
+      {required && <span className="text-primary ml-0.5" aria-hidden="true">*</span>}
+    </label>
+    {children}
+    {hint && <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{hint}</p>}
+  </div>
+);
+
+const AdminFormSection = ({ title, desc, icon: Icon }: { title: string; desc?: string; icon: React.ComponentType<{ size?: number; className?: string }> }) => (
+  <div className="pt-1">
+    <div className="flex items-start gap-3 mb-4 pb-3 border-b border-border">
+      <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+        <Icon size={17} className="text-primary" />
+      </div>
+      <div className="min-w-0">
+        <h4 className="text-sm font-bold text-foreground">{title}</h4>
+        {desc && <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>}
+      </div>
+    </div>
+  </div>
+);
 const DEFAULT_FILTERS: CatalogueFilters = {
   city: "", type: "Toutes catégories", capacity: "", maxPrice: 100000,
   amenity: "Tous", availOnly: false, checkIn: "", checkOut: "", budget: 100000,
@@ -2847,11 +2921,41 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
   const [showAdd, setShowAdd] = useState(false);
   const [editProp, setEditProp] = useState<Property | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const emptyForm = { name: "", type: "Villa", city: "Abidjan", price: 100000, capacity: 10, area: 200, description: "" };
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<PropertyFormData>(emptyPropertyForm);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+
+  const toggleFormList = (key: "amenities" | "services", value: string) => {
+    setForm(f => ({
+      ...f,
+      [key]: f[key].includes(value) ? f[key].filter(x => x !== value) : [...f[key], value],
+    }));
+  };
+
+  const resolveCoords = (city: string, existing?: Property) => {
+    if (existing && existing.city === city) return { lat: existing.lat, lng: existing.lng };
+    return CITY_COORDS[city] || { lat: 5.3, lng: -4.0 };
+  };
+
+  const buildPropertyPayload = (imgs: string[], main: string, existing?: Property) => {
+    const coords = resolveCoords(form.city, existing);
+    const location = form.location.trim() || `${form.city}, Côte d'Ivoire`;
+    return {
+      ...form,
+      lat: coords.lat,
+      lng: coords.lng,
+      image: main,
+      mainImage: main,
+      images: imgs,
+      gallery: imgs,
+      location,
+      isSonapieManaged: true,
+      tag: form.tag || undefined,
+      rating: existing?.rating ?? 4.5,
+      reviews: existing?.reviews ?? 0,
+    };
+  };
 
   const applyUploads = async (files: File[]) => {
     const images = files.filter(f => f.type.startsWith("image/")).slice(0, MAX_PROPERTY_IMAGES);
@@ -2883,7 +2987,25 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
   );
 
   const openEdit = (p: Property) => {
-    setForm({ name: p.name, type: p.type, city: p.city, price: p.price, capacity: p.capacity, area: p.area, description: p.description });
+    setForm({
+      name: p.name,
+      type: p.type,
+      city: p.city,
+      location: p.location?.endsWith(", Côte d'Ivoire")
+        ? p.location.replace(/, Côte d'Ivoire$/, "")
+        : (p.location || ""),
+      description: p.description,
+      price: p.price,
+      capacity: p.capacity,
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      area: p.area,
+      tag: p.tag || "",
+      amenities: p.amenities?.length ? [...p.amenities] : ["Wi-Fi", "Climatisation"],
+      services: p.services?.length ? [...p.services] : ["Réservation"],
+      featured: p.featured,
+      available: p.available,
+    });
     setUploadedUrls(p.gallery?.length ? p.gallery : (p.images?.length ? p.images : [p.image].filter(Boolean)));
     setEditProp(p);
     setShowAdd(true);
@@ -2898,8 +3020,16 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
       notify("Veuillez renseigner le nom du bien");
       return;
     }
+    if (!form.description.trim()) {
+      notify("Veuillez ajouter une description du bien");
+      return;
+    }
     if (form.price <= 0 || Number.isNaN(form.price)) {
       notify("Veuillez renseigner un prix valide");
+      return;
+    }
+    if (form.capacity <= 0 || form.bedrooms < 0 || form.bathrooms < 0 || form.area <= 0) {
+      notify("Vérifiez la capacité, les chambres, salles de bain et la surface");
       return;
     }
     if (!editProp && !uploadedUrls.length) {
@@ -2911,16 +3041,7 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
         if (p.id !== editProp.id) return p;
         const imgs = uploadedUrls.length ? uploadedUrls : (p.gallery?.length ? p.gallery : p.images);
         const main = imgs?.[0] || p.mainImage || p.image;
-        return {
-          ...p,
-          ...form,
-          image: main,
-          mainImage: main,
-          images: imgs?.length ? imgs : p.images,
-          gallery: imgs?.length ? imgs : p.gallery,
-          location: `${form.city}, Côte d'Ivoire`,
-          isSonapieManaged: true,
-        };
+        return { ...p, ...buildPropertyPayload(imgs, main, p), id: p.id };
       }));
       notify("Bien modifié avec succès");
     } else {
@@ -2928,29 +3049,14 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
       const main = imgs[0];
       const newProp: Property = {
         id: String(Date.now()),
-        ...form,
-        lat: 5.3,
-        lng: -4.0,
-        rating: 4.5,
-        reviews: 0,
-        image: main,
-        mainImage: main,
-        images: imgs,
-        gallery: imgs,
-        location: `${form.city}, Côte d'Ivoire`,
-        isSonapieManaged: true,
-        amenities: ["Wi-Fi", "Climatisation"],
-        services: ["Réception 24h/24"],
-        bedrooms: 2,
-        bathrooms: 1,
-        available: true, featured: false,
+        ...buildPropertyPayload(imgs, main),
       };
       setProperties(prev => [...prev, newProp]);
       notify("Nouveau bien créé");
     }
     setShowAdd(false);
     setEditProp(null);
-    setForm(emptyForm);
+    setForm(emptyPropertyForm());
     setUploadedUrls([]);
   };
 
@@ -2969,7 +3075,7 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Gestion des biens" subtitle={`${properties.length} biens patrimoniaux`}>
-        <button onClick={() => { setEditProp(null); setForm(emptyForm); setShowAdd(true); }}
+        <button onClick={() => { setEditProp(null); setForm(emptyPropertyForm()); setUploadedUrls([]); setShowAdd(true); }}
           className="flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-orange-700 transition-colors shadow-md shadow-primary/20">
           <Plus size={15} /> Ajouter un bien
         </button>
@@ -2983,84 +3089,189 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
 
       {showAdd && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setShowAdd(false); setEditProp(null); }}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="font-bold text-lg text-foreground">{editProp ? "Modifier le bien" : "Nouveau bien"}</h3>
-              <button onClick={() => { setShowAdd(false); setEditProp(null); }} className="w-9 h-9 bg-muted rounded-full flex items-center justify-center hover:bg-border">
+          <div className="bg-card rounded-2xl w-full max-w-2xl shadow-2xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-5 border-b border-border shrink-0">
+              <div>
+                <h3 className="font-bold text-lg text-foreground">{editProp ? "Modifier le bien" : "Ajouter un bien patrimonial"}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Renseignez les informations pour publier le bien sur la plateforme SONAPIE</p>
+              </div>
+              <button onClick={() => { setShowAdd(false); setEditProp(null); }} className="w-9 h-9 bg-muted rounded-full flex items-center justify-center hover:bg-border" aria-label="Fermer">
                 <X size={16} />
               </button>
             </div>
-            <div className="space-y-4">
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Nom du bien *"
-                className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary" />
-              <div className="grid grid-cols-2 gap-3">
-                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                  className="bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none">
-                  {TYPES.slice(1).map(t => <option key={t}>{t}</option>)}
-                </select>
-                <select value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                  className="bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none">
-                  {CITIES.map(c => <option key={c}>{c}</option>)}
-                </select>
+
+            <div className="px-6 py-5 overflow-y-auto space-y-6 flex-1">
+              <AdminFormSection title="Identification" desc="Nom et catégorie du bien" icon={Building2} />
+              <div className="space-y-4">
+                <AdminFormField label="Nom du bien" required hint="Ex. : Hôtel Président, Villa présidentielle…">
+                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Saisir le nom officiel"
+                    className={inputClass} />
+                </AdminFormField>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <AdminFormField label="Type de bien" required>
+                    <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className={selectClass}>
+                      {TYPES.slice(1).map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </AdminFormField>
+                  <AdminFormField label="Étiquette (optionnel)" hint="Badge affiché sur la fiche">
+                    <select value={form.tag} onChange={e => setForm(f => ({ ...f, tag: e.target.value }))} className={selectClass}>
+                      <option value="">Aucune</option>
+                      {PROPERTY_TAGS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </AdminFormField>
+                </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <input value={form.price} onChange={e => setForm(f => ({ ...f, price: +e.target.value }))} placeholder="Prix / nuit" type="number"
-                  className="bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none" />
-                <input value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: +e.target.value }))} placeholder="Capacité" type="number"
-                  className="bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none" />
-                <input value={form.area} onChange={e => setForm(f => ({ ...f, area: +e.target.value }))} placeholder="Surface m²" type="number"
-                  className="bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none" />
+
+              <AdminFormSection title="Localisation" desc="Ville et adresse précise" icon={MapPin} />
+              <div className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <AdminFormField label="Ville" required>
+                    <select value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className={selectClass}>
+                      {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </AdminFormField>
+                  <AdminFormField label="Coordonnées GPS" hint="Positionnées automatiquement selon la ville">
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-muted border border-border text-xs text-muted-foreground">
+                      <MapPin size={14} className="shrink-0 text-primary" />
+                      {resolveCoords(form.city, editProp ?? undefined).lat.toFixed(4)}, {resolveCoords(form.city, editProp ?? undefined).lng.toFixed(4)}
+                    </div>
+                  </AdminFormField>
+                </div>
+                <AdminFormField label="Adresse complète" hint="Quartier, rue, repères…">
+                  <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="Ex. : Boulevard Hassan II, Cocody"
+                    className={inputClass} />
+                </AdminFormField>
               </div>
-              <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description..." rows={3}
-                className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none resize-none" />
-              <input
-                ref={uploadInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => applyUploads(Array.from(e.target.files || []))}
-              />
-              <div
-                className="border-2 border-dashed border-border rounded-xl p-6 text-center text-sm text-muted-foreground hover:bg-muted cursor-pointer transition-colors"
-                role="button"
-                tabIndex={0}
-                onClick={() => uploadInputRef.current?.click()}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") uploadInputRef.current?.click(); }}
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  applyUploads(Array.from(e.dataTransfer.files || []));
-                }}
-              >
-                <Upload size={22} className="mx-auto mb-2 opacity-50" />
-                {uploading ? "Chargement des photos…" : "Glissez vos photos ici ou cliquez pour uploader"}
-                <div className="text-xs text-muted-foreground mt-1.5">PNG/JPG/WebP — max {MAX_PROPERTY_IMAGES} images, 2 Mo chacune</div>
+
+              <AdminFormSection title="Caractéristiques" desc="Capacité et équipements du bien" icon={Home} />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <AdminFormField label="Capacité" required hint="Personnes max.">
+                  <input value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: +e.target.value }))} type="number" min={1}
+                    className={inputClass} />
+                </AdminFormField>
+                <AdminFormField label="Chambres" required>
+                  <input value={form.bedrooms} onChange={e => setForm(f => ({ ...f, bedrooms: +e.target.value }))} type="number" min={0}
+                    className={inputClass} />
+                </AdminFormField>
+                <AdminFormField label="Salles de bain" required>
+                  <input value={form.bathrooms} onChange={e => setForm(f => ({ ...f, bathrooms: +e.target.value }))} type="number" min={0}
+                    className={inputClass} />
+                </AdminFormField>
+                <AdminFormField label="Surface (m²)" required>
+                  <input value={form.area} onChange={e => setForm(f => ({ ...f, area: +e.target.value }))} type="number" min={1}
+                    className={inputClass} />
+                </AdminFormField>
               </div>
+
+              <AdminFormSection title="Tarification" desc="Prix affiché aux visiteurs" icon={CreditCard} />
+              <AdminFormField label="Prix par nuit (FCFA)" required hint={`Tarif actuel : ${fmt(form.price)}`}>
+                <input value={form.price} onChange={e => setForm(f => ({ ...f, price: +e.target.value }))} type="number" min={1000} step={1000}
+                  className={inputClass} />
+              </AdminFormField>
+
+              <AdminFormSection title="Description" desc="Présentation détaillée du bien" icon={FileText} />
+              <AdminFormField label="Description" required hint="Mettez en avant l'histoire, les services et le cadre du bien.">
+                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Décrivez le bien patrimonial…" rows={4}
+                  className={`${inputClass} resize-none`} />
+              </AdminFormField>
+
+              <AdminFormSection title="Équipements & services" desc="Sélectionnez ce qui est proposé aux visiteurs" icon={Wifi} />
+              <AdminFormField label="Équipements disponibles">
+                <div className="flex flex-wrap gap-2">
+                  {PROPERTY_AMENITY_OPTIONS.map(a => (
+                    <button key={a} type="button" onClick={() => toggleFormList("amenities", a)}
+                      className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${form.amenities.includes(a) ? "bg-secondary/15 border-secondary text-secondary" : "bg-muted border-border text-muted-foreground hover:border-primary/40"}`}>
+                      {form.amenities.includes(a) && <Check size={12} className="inline mr-1 -mt-0.5" />}
+                      {a}
+                    </button>
+                  ))}
+                </div>
+              </AdminFormField>
+              <AdminFormField label="Services proposés">
+                <div className="flex flex-wrap gap-2">
+                  {PROPERTY_SERVICE_OPTIONS.map(s => (
+                    <button key={s} type="button" onClick={() => toggleFormList("services", s)}
+                      className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${form.services.includes(s) ? "bg-primary/10 border-primary text-primary" : "bg-muted border-border text-muted-foreground hover:border-primary/40"}`}>
+                      {form.services.includes(s) && <Check size={12} className="inline mr-1 -mt-0.5" />}
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </AdminFormField>
+
+              <AdminFormSection title="Photos" desc="La première image sera utilisée comme couverture" icon={Camera} />
+              <AdminFormField label="Galerie photos" required={!editProp} hint={`PNG, JPG ou WebP — max ${MAX_PROPERTY_IMAGES} images, 2 Mo chacune`}>
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => applyUploads(Array.from(e.target.files || []))}
+                />
+                <div
+                  className="border-2 border-dashed border-border rounded-xl p-6 text-center text-sm text-muted-foreground hover:bg-muted/60 hover:border-primary/40 cursor-pointer transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => uploadInputRef.current?.click()}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") uploadInputRef.current?.click(); }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    applyUploads(Array.from(e.dataTransfer.files || []));
+                  }}
+                >
+                  <Upload size={24} className="mx-auto mb-2 text-primary/70" />
+                  {uploading ? "Chargement des photos en cours…" : "Glissez vos photos ici ou cliquez pour parcourir"}
+                </div>
+              </AdminFormField>
               {uploadedUrls.length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {uploadedUrls.slice(0, 8).map((u, idx) => (
-                    <div key={`${u}-${idx}`} className="relative">
-                      <img src={u} alt={`upload-${idx}`} className="w-full h-16 object-cover rounded-lg border border-border bg-muted" />
+                <div className="grid grid-cols-4 gap-2 -mt-2">
+                  {uploadedUrls.slice(0, MAX_PROPERTY_IMAGES).map((u, idx) => (
+                    <div key={`${u.slice(0, 24)}-${idx}`} className="relative">
+                      <img src={u} alt={`Aperçu ${idx + 1}`} className="w-full h-16 object-cover rounded-lg border border-border bg-muted" />
                       {idx === 0 && (
-                        <span className="absolute top-1 left-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">Cover</span>
+                        <span className="absolute top-1 left-1 text-[10px] px-1.5 py-0.5 rounded bg-primary text-white font-medium">Couverture</span>
                       )}
                     </div>
                   ))}
                   <button
                     type="button"
                     onClick={() => { setUploadedUrls([]); if (uploadInputRef.current) uploadInputRef.current.value = ""; }}
-                    className="col-span-4 text-xs text-red-600 hover:underline text-left"
+                    className="col-span-4 text-xs text-red-600 hover:underline text-left font-medium"
                   >
-                    Retirer les photos
+                    Retirer toutes les photos
                   </button>
                 </div>
               )}
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => { setShowAdd(false); setEditProp(null); }} className="flex-1 border border-border py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors">Annuler</button>
-                <button onClick={saveProperty} className="flex-1 bg-primary text-white py-2.5 rounded-xl text-sm font-bold hover:bg-orange-700 transition-colors">{editProp ? "Enregistrer" : "Créer le bien"}</button>
+
+              <AdminFormSection title="Publication" desc="Visibilité sur la plateforme" icon={Eye} />
+              <div className="grid sm:grid-cols-2 gap-3">
+                <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30 cursor-pointer hover:bg-muted/60 transition-colors">
+                  <input type="checkbox" checked={form.available} onChange={e => setForm(f => ({ ...f, available: e.target.checked }))}
+                    className="w-4 h-4 accent-primary rounded" />
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Disponible à la réservation</div>
+                    <div className="text-xs text-muted-foreground">Le bien apparaît comme réservable</div>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30 cursor-pointer hover:bg-muted/60 transition-colors">
+                  <input type="checkbox" checked={form.featured} onChange={e => setForm(f => ({ ...f, featured: e.target.checked }))}
+                    className="w-4 h-4 accent-primary rounded" />
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Mettre en avant</div>
+                    <div className="text-xs text-muted-foreground">Affiché sur la page d'accueil</div>
+                  </div>
+                </label>
               </div>
+            </div>
+
+            <div className="flex gap-3 px-6 py-4 border-t border-border bg-muted/20 shrink-0">
+              <button onClick={() => { setShowAdd(false); setEditProp(null); }} className="flex-1 border border-border py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors">Annuler</button>
+              <button onClick={saveProperty} className="flex-1 bg-primary text-white py-2.5 rounded-xl text-sm font-bold hover:bg-orange-700 transition-colors shadow-md shadow-primary/20">
+                {editProp ? "Enregistrer les modifications" : "Publier le bien"}
+              </button>
             </div>
           </div>
         </div>
