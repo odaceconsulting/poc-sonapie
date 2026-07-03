@@ -1,8 +1,10 @@
 import * as React from "react";
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { PropertyMap } from "./components/PropertyMap";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 import { ChatAssistant } from "./components/chat/ChatAssistant";
+import { AdminChatAssistant } from "./components/chat/AdminChatAssistant";
+import type { AdminChatContext } from "./components/chat/adminChatKnowledge";
 import { BookingReceiptCard } from "./components/receipt/BookingReceiptCard";
 import { VerifyReceiptPanel } from "./components/receipt/VerifyReceiptPanel";
 import {
@@ -4612,6 +4614,63 @@ export default function App() {
 
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
 
+  const adminChatContext = useMemo<AdminChatContext>(
+    () => ({
+      properties: properties.map(p => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        city: p.city,
+        price: p.price,
+        capacity: p.capacity,
+        bedrooms: p.bedrooms,
+        available: p.available,
+        featured: p.featured,
+      })),
+      reservations: reservations.map(r => ({
+        id: r.id,
+        property: r.property,
+        city: r.city,
+        checkIn: r.checkIn,
+        checkOut: r.checkOut,
+        total: r.total,
+        status: r.status,
+        guests: r.guests,
+        client: r.client,
+      })),
+      users: adminUsers.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+        status: u.status,
+        reservations: u.reservations,
+        since: u.since,
+      })),
+      maintenanceTickets: maintenanceTickets.map(t => ({
+        id: t.id,
+        property: t.property,
+        issue: t.issue,
+        priority: t.priority,
+        status: t.status,
+        date: t.date,
+      })),
+      claims: adminClaims.map(c => ({
+        id: c.id,
+        user: c.user,
+        property: c.property,
+        subject: c.subject,
+        status: c.status,
+        date: c.date,
+        priority: c.priority,
+      })),
+      settings: platformSettings,
+      stats: ADMIN_STATS,
+    }),
+    [properties, reservations, adminUsers, maintenanceTickets, adminClaims, platformSettings],
+  );
+
   if (isAdmin) {
     if (!user?.isAdmin) {
       return (
@@ -4641,6 +4700,10 @@ export default function App() {
             {renderPage()}
           </main>
         </div>
+        <AdminChatAssistant
+          navigate={p => navigate(p as Page)}
+          context={adminChatContext}
+        />
         <ToastContainer message={toast} />
       </div>
     );
