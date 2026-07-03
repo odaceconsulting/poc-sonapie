@@ -2,7 +2,8 @@ import * as React from "react";
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { PropertyMap } from "./components/PropertyMap";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
-import { APP_NAME, APP_NAME_SHORT, APP_TAGLINE, SONAPIE_LOGO, SONAPIE_LOGO_ICON } from "./constants/brand";
+import { ChatAssistant } from "./components/chat/ChatAssistant";
+import { APP_NAME, APP_NAME_SHORT, APP_TAGLINE, SONAPIE_LOGO } from "./constants/brand";
 import { SONAPIE_ESTABLISHMENTS, SONAPIE_CITIES, SONAPIE_TYPES } from "./data/establishments";
 import {
   Search, MapPin, Calendar, Users, ChevronDown, Star, Heart,
@@ -414,39 +415,41 @@ const AdminPageHeader = ({ title, subtitle, children }: { title: string; subtitl
 
 const AppLogo = ({ variant = "header", onClick }: { variant?: "header" | "footer" | "auth" | "admin"; onClick?: () => void }) => {
   const Wrapper = onClick ? "button" : "div";
+  const clickable = onClick ? "cursor-pointer" : "";
+
   if (variant === "footer") {
     return (
-      <Wrapper onClick={onClick} className={onClick ? "text-left" : ""}>
-        <img src={SONAPIE_LOGO} alt={APP_NAME} className="h-12 w-auto object-contain" />
-        <p className="text-xs text-primary font-semibold mt-2 tracking-wide">Booking Platform</p>
+      <Wrapper onClick={onClick} className={`${clickable} ${onClick ? "text-left" : ""}`}>
+        <img
+          src={SONAPIE_LOGO}
+          alt="SONAPIE — Société Nationale de Gestion du Patrimoine de l'État"
+          className="h-14 w-auto max-w-full object-contain"
+        />
       </Wrapper>
     );
   }
   if (variant === "auth") {
     return (
-      <Wrapper onClick={onClick} className="flex flex-col items-center">
-        <img src={SONAPIE_LOGO_ICON} alt={APP_NAME_SHORT} className="h-14 w-14 object-contain" />
+      <Wrapper onClick={onClick} className={`flex flex-col items-center ${clickable}`}>
+        <img src={SONAPIE_LOGO} alt="SONAPIE" className="h-16 sm:h-20 w-auto object-contain" />
       </Wrapper>
     );
   }
   if (variant === "admin") {
     return (
-      <Wrapper onClick={onClick} className={`flex items-center gap-3 ${onClick ? "text-left" : ""}`}>
-        <img src={SONAPIE_LOGO_ICON} alt={APP_NAME_SHORT} className="h-10 w-10 object-contain shrink-0" />
-        <div className="min-w-0">
-          <div className="font-bold text-white text-sm truncate" style={{ fontFamily: "Playfair Display, serif" }}>{APP_NAME_SHORT}</div>
-          <div className="text-[11px] text-primary font-medium">Booking Platform</div>
-        </div>
+      <Wrapper onClick={onClick} className={`${clickable} ${onClick ? "text-left" : ""}`}>
+        <img src={SONAPIE_LOGO} alt={APP_NAME_SHORT} className="h-10 w-auto max-w-full object-contain" />
+        <p className="text-[11px] text-primary font-semibold mt-2 tracking-wide">Booking Platform</p>
       </Wrapper>
     );
   }
   return (
-    <Wrapper onClick={onClick} className={`flex items-center gap-3 ${onClick ? "text-left" : ""}`}>
-      <img src={SONAPIE_LOGO_ICON} alt={APP_NAME_SHORT} className="h-9 w-9 object-contain shrink-0" />
-      <div className="hidden sm:block min-w-0">
-        <div className="font-bold text-foreground text-sm leading-tight truncate" style={{ fontFamily: "Playfair Display, serif" }}>{APP_NAME}</div>
-        <div className="text-[11px] text-muted-foreground leading-tight truncate">{APP_TAGLINE}</div>
-      </div>
+    <Wrapper onClick={onClick} className={`flex items-center shrink-0 ${clickable} ${onClick ? "text-left" : ""}`}>
+      <img
+        src={SONAPIE_LOGO}
+        alt="SONAPIE — Société Nationale de Gestion du Patrimoine de l'État"
+        className="h-10 sm:h-11 w-auto max-w-[11rem] sm:max-w-[17.5rem] object-contain object-left"
+      />
     </Wrapper>
   );
 };
@@ -748,19 +751,58 @@ const BUDGET_OPTIONS = [
   { value: 75000, label: "≤ 75 000 FCFA / nuit" },
 ];
 
-const HeroSearchField = ({ icon: Icon, label, children }: { icon: typeof MapPin; label: string; children: ReactNode }) => (
-  <div className="flex flex-1 min-w-0 items-center gap-3 px-4 py-3.5">
-    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-      <Icon size={17} className="text-primary" />
+const HeroSearchField = ({
+  icon: Icon,
+  label,
+  children,
+  fieldClass = "",
+}: {
+  icon: typeof MapPin;
+  label: string;
+  children: ReactNode;
+  fieldClass?: string;
+}) => (
+  <div className={`flex items-start gap-2 px-2.5 py-3 flex-1 ${fieldClass}`}>
+    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+      <Icon size={14} className="text-primary" />
     </div>
-    <div className="flex-1 min-w-0">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground leading-none mb-1.5">{label}</div>
+    <div className="flex-1 overflow-visible">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground leading-none mb-1.5">{label}</div>
       {children}
     </div>
   </div>
 );
 
-const heroSelectClass = "w-full bg-transparent text-sm font-medium text-foreground outline-none cursor-pointer appearance-none truncate pr-1";
+const HeroSelect = ({
+  value,
+  onChange,
+  options,
+}: {
+  value: string | number;
+  onChange: (value: string) => void;
+  options: { value: string | number; label: string }[];
+}) => {
+  const selected = options.find(o => String(o.value) === String(value));
+  const display = selected?.label ?? options[0]?.label ?? "";
+
+  return (
+    <div className="relative w-full">
+      <span className={`block text-sm font-medium leading-snug pr-5 whitespace-nowrap ${selected ? "text-foreground" : "text-muted-foreground"}`}>
+        {display}
+      </span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+      >
+        {options.map(o => (
+          <option key={String(o.value)} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <ChevronDown size={14} className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-muted-foreground" />
+    </div>
+  );
+};
 
 const formatHeroDate = (value: string) =>
   value ? new Date(`${value}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : null;
@@ -770,7 +812,7 @@ const HeroDateInput = ({ value, onChange, min }: { value: string; onChange: (v: 
 
   return (
     <label className="relative flex items-center w-full min-h-[22px] cursor-pointer">
-      <span className={`text-sm font-medium truncate ${value ? "text-foreground" : "text-muted-foreground"}`}>
+      <span className={`block text-sm font-medium leading-snug whitespace-nowrap ${value ? "text-foreground" : "text-muted-foreground"}`}>
         {formatHeroDate(value) || "Choisir une date"}
       </span>
       <input
@@ -857,57 +899,129 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
             <p className="text-gray-300 text-lg mb-8 max-w-xl leading-relaxed">
               Villas, hôtels, résidences et espaces événementiels du patrimoine national. Réservez en ligne, payez localement.
             </p>
+          </div>
 
-            {/* Search bar */}
-            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-4xl">
-              {/* Desktop — barre horizontale unifiée */}
-              <div className="hidden md:flex items-stretch">
-                <HeroSearchField icon={MapPin} label="Destination">
-                  <select className={heroSelectClass} value={searchCity} onChange={e => setSearchCity(e.target.value)}>
-                    <option value="">Toutes les villes</option>
-                    {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+            {/* Search bar — pleine largeur pour tous les filtres sur une ligne */}
+            <div className="bg-white rounded-2xl shadow-2xl w-full">
+              {/* Desktop — tous les filtres sur une seule ligne (xl+ pour assez d'espace) */}
+              <div className="hidden xl:flex items-stretch">
+                <HeroSearchField icon={MapPin} label="Destination" fieldClass="min-w-[9.5rem]">
+                  <HeroSelect
+                    value={searchCity}
+                    onChange={setSearchCity}
+                    options={[
+                      { value: "", label: "Toutes les villes" },
+                      ...CITIES.map(c => ({ value: c, label: c })),
+                    ]}
+                  />
                 </HeroSearchField>
                 <div className="w-px bg-border self-stretch my-3" />
-                <HeroSearchField icon={Building2} label="Type de bien">
-                  <select className={heroSelectClass} value={searchType} onChange={e => setSearchType(e.target.value)}>
-                    {TYPES.map(t => <option key={t}>{t}</option>)}
-                  </select>
+                <HeroSearchField icon={Building2} label="Type de bien" fieldClass="min-w-[11.5rem] flex-[1.2]">
+                  <HeroSelect
+                    value={searchType}
+                    onChange={setSearchType}
+                    options={TYPES.map(t => ({ value: t, label: t }))}
+                  />
                 </HeroSearchField>
                 <div className="w-px bg-border self-stretch my-3" />
-                <HeroSearchField icon={Calendar} label="Arrivée">
+                <HeroSearchField icon={Calendar} label="Arrivée" fieldClass="min-w-[9rem]">
                   <HeroDateInput value={searchCheckIn} onChange={setSearchCheckIn} />
                 </HeroSearchField>
                 <div className="w-px bg-border self-stretch my-3" />
-                <HeroSearchField icon={Calendar} label="Départ">
+                <HeroSearchField icon={Calendar} label="Départ" fieldClass="min-w-[9rem]">
                   <HeroDateInput value={searchCheckOut} onChange={setSearchCheckOut} min={searchCheckIn || undefined} />
+                </HeroSearchField>
+                <div className="w-px bg-border self-stretch my-3" />
+                <HeroSearchField icon={Users} label="Capacité" fieldClass="min-w-[11.5rem] flex-[1.2]">
+                  <HeroSelect
+                    value={searchCapacity}
+                    onChange={setSearchCapacity}
+                    options={[
+                      { value: "", label: "Tous les effectifs" },
+                      { value: "1-5 personnes", label: "1-5 personnes" },
+                      { value: "6-20 personnes", label: "6-20 personnes" },
+                      { value: "21-100 personnes", label: "21-100 personnes" },
+                      { value: "100+ personnes", label: "100+ personnes" },
+                    ]}
+                  />
+                </HeroSearchField>
+                <div className="w-px bg-border self-stretch my-3" />
+                <HeroSearchField icon={CreditCard} label="Budget max" fieldClass="min-w-[13.5rem] flex-[1.5]">
+                  <HeroSelect
+                    value={searchBudget}
+                    onChange={v => setSearchBudget(+v)}
+                    options={BUDGET_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+                  />
                 </HeroSearchField>
                 <button
                   onClick={handleSearch}
-                  className="shrink-0 flex items-center justify-center gap-2 bg-primary text-white font-semibold px-6 hover:bg-orange-700 transition-colors"
+                  className="shrink-0 flex items-center justify-center gap-2 bg-primary text-white font-semibold px-5 hover:bg-orange-700 transition-colors"
                 >
                   <Search size={18} />
-                  <span className="hidden lg:inline">Rechercher</span>
+                  <span className="hidden xl:inline">Rechercher</span>
                 </button>
               </div>
 
-              {/* Desktop — 2e ligne : capacité, budget */}
-              <div className="hidden md:flex items-stretch border-t border-border bg-muted/30">
-                <HeroSearchField icon={Users} label="Capacité">
-                  <select className={heroSelectClass} value={searchCapacity} onChange={e => setSearchCapacity(e.target.value)}>
-                    <option value="">Tous les effectifs</option>
-                    <option>1-5 personnes</option>
-                    <option>6-20 personnes</option>
-                    <option>21-100 personnes</option>
-                    <option>100+ personnes</option>
-                  </select>
-                </HeroSearchField>
-                <div className="w-px bg-border self-stretch my-3" />
-                <HeroSearchField icon={CreditCard} label="Budget max">
-                  <select className={heroSelectClass} value={searchBudget} onChange={e => setSearchBudget(+e.target.value)}>
-                    {BUDGET_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </HeroSearchField>
+              {/* Tablette / petit desktop — 2 lignes */}
+              <div className="hidden md:flex xl:hidden flex-col">
+                <div className="flex items-stretch">
+                  <HeroSearchField icon={MapPin} label="Destination" fieldClass="min-w-[9rem]">
+                    <HeroSelect
+                      value={searchCity}
+                      onChange={setSearchCity}
+                      options={[
+                        { value: "", label: "Toutes les villes" },
+                        ...CITIES.map(c => ({ value: c, label: c })),
+                      ]}
+                    />
+                  </HeroSearchField>
+                  <div className="w-px bg-border self-stretch my-3" />
+                  <HeroSearchField icon={Building2} label="Type de bien" fieldClass="min-w-[10rem] flex-[1.2]">
+                    <HeroSelect
+                      value={searchType}
+                      onChange={setSearchType}
+                      options={TYPES.map(t => ({ value: t, label: t }))}
+                    />
+                  </HeroSearchField>
+                  <div className="w-px bg-border self-stretch my-3" />
+                  <HeroSearchField icon={Calendar} label="Arrivée" fieldClass="min-w-[8.5rem]">
+                    <HeroDateInput value={searchCheckIn} onChange={setSearchCheckIn} />
+                  </HeroSearchField>
+                  <div className="w-px bg-border self-stretch my-3" />
+                  <HeroSearchField icon={Calendar} label="Départ" fieldClass="min-w-[8.5rem]">
+                    <HeroDateInput value={searchCheckOut} onChange={setSearchCheckOut} min={searchCheckIn || undefined} />
+                  </HeroSearchField>
+                </div>
+                <div className="flex items-stretch border-t border-border">
+                  <HeroSearchField icon={Users} label="Capacité" fieldClass="min-w-[10rem] flex-[1.2]">
+                    <HeroSelect
+                      value={searchCapacity}
+                      onChange={setSearchCapacity}
+                      options={[
+                        { value: "", label: "Tous les effectifs" },
+                        { value: "1-5 personnes", label: "1-5 personnes" },
+                        { value: "6-20 personnes", label: "6-20 personnes" },
+                        { value: "21-100 personnes", label: "21-100 personnes" },
+                        { value: "100+ personnes", label: "100+ personnes" },
+                      ]}
+                    />
+                  </HeroSearchField>
+                  <div className="w-px bg-border self-stretch my-3" />
+                  <HeroSearchField icon={CreditCard} label="Budget max" fieldClass="min-w-[12rem] flex-[1.5]">
+                    <HeroSelect
+                      value={searchBudget}
+                      onChange={v => setSearchBudget(+v)}
+                      options={BUDGET_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+                    />
+                  </HeroSearchField>
+                  <button
+                    onClick={handleSearch}
+                    className="shrink-0 flex items-center justify-center gap-2 bg-primary text-white font-semibold px-5 hover:bg-orange-700 transition-colors"
+                  >
+                    <Search size={18} />
+                    Rechercher
+                  </button>
+                </div>
               </div>
 
               {/* Mobile — grille empilée */}
@@ -965,7 +1079,6 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
                 </div>
               ))}
             </div>
-          </div>
         </div>
       </section>
 
@@ -4332,6 +4445,7 @@ export default function App() {
         {renderPage()}
       </main>
       {!isDashboard && <Footer navigate={navigate} />}
+      <ChatAssistant navigate={p => navigate(p as Page)} />
       <ToastContainer message={toast} />
     </div>
   );
