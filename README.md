@@ -4,9 +4,13 @@ Plateforme de réservation des biens patrimoniaux de l'État de Côte d'Ivoire �
 
 Logo officiel : [sonapie.ci](https://sonapie.ci/)
 
-  ## Running the code
+**Production (branche `main`)** : [poc-sonapie.vercel.app](https://poc-sonapie.vercel.app)
 
-  Run `npm i` to install the dependencies.
+## Lancer en local
 
-  Run `npm run dev` to start the development server.
-  
+```bash
+npm i
+npm run dev
+```
+
+Copiez `.env.example` vers `.env` et renseignez `VITE_GROQ_API_KEY` pour activer les assistants IA (public + admin). Sur Vercel, ajoutez la même variable pour la production.
