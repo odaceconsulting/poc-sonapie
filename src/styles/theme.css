@@ -177,3 +177,33 @@
   ::-webkit-scrollbar-thumb { background: rgba(26,26,46,0.2); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(26,26,46,0.4); }
 }
+
+/* QR scanner (html5-qrcode) — mobile-friendly */
+.sonapie-qr-reader {
+  min-height: min(70vw, 320px);
+  aspect-ratio: 1;
+  max-height: 420px;
+}
+
+.sonapie-qr-reader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.sonapie-qr-reader #qr-shaded-region {
+  border-color: rgba(0, 158, 73, 0.65) !important;
+}
+
+.sonapie-qr-reader img[alt="Info icon"] {
+  display: none;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

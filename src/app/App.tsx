@@ -3,6 +3,15 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { PropertyMap } from "./components/PropertyMap";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 import { ChatAssistant } from "./components/chat/ChatAssistant";
+import { BookingReceiptCard } from "./components/receipt/BookingReceiptCard";
+import { VerifyReceiptPanel } from "./components/receipt/VerifyReceiptPanel";
+import {
+  issueReceipt,
+  getStoredReceipt,
+  shareReceiptViaWhatsApp,
+  downloadReceiptPdf,
+  type SonapieReceipt,
+} from "./lib/receipt";
 import { APP_NAME, APP_NAME_SHORT, APP_TAGLINE, SONAPIE_LOGO } from "./constants/brand";
 import { SONAPIE_ESTABLISHMENTS, SONAPIE_CITIES, SONAPIE_TYPES } from "./data/establishments";
 import {
@@ -15,7 +24,7 @@ import {
   Instagram, Youtube, ChevronRight, ChevronLeft, X, Menu,
   Check, ArrowLeft, Upload, Home, Bookmark, List, Map,
   Camera, Info, HelpCircle, FileText, Zap, RefreshCw,
-  Download, MessageCircle, Lock, UserPlus, Key
+  Download, MessageCircle, Lock, UserPlus, Key, ShieldCheck
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -29,8 +38,8 @@ type Page =
   | "login" | "register" | "forgot-password"
   | "admin" | "admin-properties" | "admin-reservations"
   | "admin-users" | "admin-payments" | "admin-maintenance"
-  | "admin-claims" | "admin-stats" | "admin-settings"
-  | "about" | "contact";
+  | "admin-claims"   | "admin-stats" | "admin-settings" | "admin-verify"
+  | "about" | "contact" | "verify";
 
 interface CatalogueFilters {
   city: string;
@@ -307,15 +316,67 @@ const matchAmenity = (amenities: string[], filter: string) => {
   return amenities.some(a => a.toLowerCase().includes(q.replace("accessibilité ", "")));
 };
 
-const downloadReceipt = (data: { ref: string; property?: string; total?: number; client?: string }) => {
-  const content = `${APP_NAME} — Reçu de réservation\nRéférence: ${data.ref}\nClient: ${data.client || "—"}\nBien: ${data.property || "—"}\nMontant: ${data.total ? fmt(data.total) : "—"}\nDate: ${new Date().toLocaleDateString("fr-CI")}`;
-  const blob = new Blob([content], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${data.ref}-recu.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
+const buildReceiptFromBooking = async (bd: Record<string, unknown>): Promise<SonapieReceipt> => {
+  const ref = String(bd.ref || "");
+  const existing = getStoredReceipt(ref);
+  if (existing) return existing;
+
+  return issueReceipt({
+    ref,
+    propertyId: (bd.property as { id?: string })?.id || "1",
+    property: (bd.property as { name?: string })?.name || "—",
+    city: (bd.property as { city?: string })?.city || "—",
+    client: `${bd.firstName || ""} ${bd.lastName || ""}`.trim() || "Client",
+    email: String(bd.email || ""),
+    phone: String(bd.phone || ""),
+    checkIn: String(bd.checkIn || "—"),
+    checkOut: String(bd.checkOut || "—"),
+    guests: Number(bd.guests) || 1,
+    nights: Number(bd.nights) || 1,
+    subtotal: Number(bd.total) || 0,
+    fees: Number(bd.fees) || 0,
+    total: Number(bd.grandTotal) || 0,
+    paymentMethod: String(bd.paymentMethod || "card"),
+    idType: String(bd.idType || ""),
+    idNumber: String(bd.idNumber || ""),
+  });
+};
+
+const printReceiptByRef = async (data: {
+  ref: string;
+  property?: string;
+  propertyId?: string;
+  city?: string;
+  total?: number;
+  client?: string;
+  checkIn?: string;
+  checkOut?: string;
+  guests?: number;
+  phone?: string;
+  email?: string;
+}) => {
+  let receipt = getStoredReceipt(data.ref);
+  if (!receipt) {
+    const total = data.total || 0;
+    receipt = await issueReceipt({
+      ref: data.ref,
+      propertyId: data.propertyId || "1",
+      property: data.property || "—",
+      city: data.city || "—",
+      client: data.client || "Client",
+      email: data.email || "",
+      phone: data.phone || "",
+      checkIn: data.checkIn || "—",
+      checkOut: data.checkOut || "—",
+      guests: data.guests || 1,
+      nights: 1,
+      subtotal: Math.round(total * 0.95),
+      fees: Math.round(total * 0.05),
+      total,
+      paymentMethod: "card",
+    });
+  }
+  await downloadReceiptPdf(receipt);
 };
 
 const AvailabilityCalendar = ({ bookedDays = [5, 6, 12, 13, 20] }: { bookedDays?: number[] }) => {
@@ -1071,11 +1132,11 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
               </div>
             </div>
 
-            <div className="flex gap-6 mt-6">
+            <div className="flex flex-wrap gap-4 sm:gap-6 mt-6">
               {[{ label: "127", desc: "Biens patrimoniaux" }, { label: "8", desc: "Destinations phares" }, { label: "1842", desc: "Clients satisfaits" }].map(({ label, desc }) => (
-                <div key={desc}>
-                  <div className="text-2xl font-bold text-white" style={{ fontFamily: "Playfair Display, serif" }}>{label}</div>
-                  <div className="text-xs text-gray-400">{desc}</div>
+                <div key={desc} className="min-w-[5.5rem]">
+                  <div className="text-xl sm:text-2xl font-bold text-white" style={{ fontFamily: "Playfair Display, serif" }}>{label}</div>
+                  <div className="text-[11px] sm:text-xs text-gray-400">{desc}</div>
                 </div>
               ))}
             </div>
@@ -1555,8 +1616,8 @@ const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, tog
       </div>
 
       {/* Gallery */}
-      <div className="grid grid-cols-4 gap-2 rounded-2xl overflow-hidden mb-8 h-80 sm:h-96">
-        <div className="col-span-3 relative overflow-hidden bg-muted">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 rounded-2xl overflow-hidden mb-8 h-64 sm:h-96">
+        <div className="sm:col-span-3 relative overflow-hidden bg-muted h-64 sm:h-full">
           <ImageWithFallback src={gallery[currentImg]} alt={prop.name} className="w-full h-full object-cover" />
           <button
             onClick={() => setCurrentImg(i => Math.max(0, i - 1))}
@@ -1579,7 +1640,7 @@ const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, tog
             <Camera size={12} /> {currentImg + 1}/{gallery.length}
           </div>
         </div>
-        <div className="flex flex-col gap-2 overflow-hidden">
+        <div className="hidden sm:flex flex-col gap-2 overflow-hidden">
           {gallery.map((img, i) => (
             <button
               key={i}
@@ -1809,13 +1870,13 @@ const BookingDatesPage = ({ navigate, property: prop, bookingData, setBookingDat
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
       <BookingSteps current={1} />
       <h1 className="text-2xl font-bold text-foreground mb-1">Sélectionnez vos dates</h1>
       <p className="text-muted-foreground mb-6 text-sm">{prop.name} — {prop.city}</p>
 
-      <div className="bg-card border border-border rounded-2xl p-6 space-y-4 mb-6">
-        <div className="grid grid-cols-2 gap-4">
+      <div className="bg-card border border-border rounded-2xl p-4 sm:p-6 space-y-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-semibold text-foreground block mb-1.5">Date d'arrivée</label>
             <input type="date" value={checkIn} onChange={e => setCheckIn(e.target.value)} min={new Date().toISOString().split("T")[0]}
@@ -1889,13 +1950,13 @@ const BookingInfoPage = ({ navigate, bookingData, setBookingData }: {
   const valid = form.firstName && form.lastName && form.email && form.phone && form.idNumber;
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
       <BookingSteps current={2} />
       <h1 className="text-2xl font-bold text-foreground mb-1">Vos informations</h1>
       <p className="text-muted-foreground mb-6 text-sm">Ces informations sont nécessaires pour valider votre réservation</p>
 
-      <div className="bg-card border border-border rounded-2xl p-6 space-y-4 mb-6">
-        <div className="grid grid-cols-2 gap-4">
+      <div className="bg-card border border-border rounded-2xl p-4 sm:p-6 space-y-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-semibold text-foreground block mb-1.5">Prénom *</label>
             <input value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} placeholder="Kouamé"
@@ -1917,7 +1978,7 @@ const BookingInfoPage = ({ navigate, bookingData, setBookingData }: {
           <input value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} placeholder="+225 07 XX XX XX XX"
             className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-semibold text-foreground block mb-1.5">Pièce d'identité *</label>
             <select value={form.idType} onChange={e => setForm(f => ({...f, idType: e.target.value}))}
@@ -1957,7 +2018,7 @@ const BookingSummaryPage = ({ navigate, bookingData }: { navigate: (p: Page) => 
   const bd = bookingData;
   const pct = typeof bd.feePct === "number" ? clampPct(bd.feePct) : 5;
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
       <BookingSteps current={3} />
       <h1 className="text-2xl font-bold text-foreground mb-1">Récapitulatif</h1>
       <p className="text-muted-foreground mb-6 text-sm">Vérifiez les détails de votre réservation</p>
@@ -1991,7 +2052,7 @@ const BookingSummaryPage = ({ navigate, bookingData }: { navigate: (p: Page) => 
 
         <div className="bg-card border border-border rounded-2xl p-5">
           <h3 className="font-semibold text-foreground mb-3">Informations client</h3>
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div><span className="text-muted-foreground">Nom :</span> <span className="font-medium">{bd.firstName} {bd.lastName}</span></div>
             <div><span className="text-muted-foreground">Email :</span> <span className="font-medium">{bd.email}</span></div>
             <div><span className="text-muted-foreground">Téléphone :</span> <span className="font-medium">{bd.phone}</span></div>
@@ -2057,12 +2118,12 @@ const BookingPaymentPage = ({ navigate, bookingData, setBookingData }: {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
       <BookingSteps current={4} />
       <h1 className="text-2xl font-bold text-foreground mb-1">Paiement</h1>
       <p className="text-muted-foreground mb-6 text-sm">Choisissez votre moyen de paiement</p>
 
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         {methods.map(m => (
           <button
             key={m.id}
@@ -2165,12 +2226,18 @@ const BookingPaymentPage = ({ navigate, bookingData, setBookingData }: {
   );
 };
 
-const BookingConfirmationPage = ({ navigate, bookingData, setReservations, user }: {
+const BookingConfirmationPage = ({ navigate, bookingData, setReservations, user, notify }: {
   navigate: (p: Page) => void;
   bookingData: any;
   setReservations?: (r: Reservation[] | ((prev: Reservation[]) => Reservation[])) => void;
   user?: any;
+  notify?: NotifyFn;
 }) => {
+  const [receipt, setReceipt] = useState<SonapieReceipt | null>(null);
+  const [receiptReady, setReceiptReady] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
+
   useEffect(() => {
     if (setReservations && bookingData.ref) {
       setReservations(prev => {
@@ -2191,82 +2258,104 @@ const BookingConfirmationPage = ({ navigate, bookingData, setReservations, user 
       });
     }
   }, [bookingData.ref]);
-  const methodLabels: Record<string, string> = {
-    "orange-money": "Orange Money",
-    "mtn-money": "MTN Money",
-    "wave": "Wave",
-    "tresor-pay": "Trésor Pay",
-    "card": "Carte bancaire",
-    "admin": "Paiement administratif"
-  };
+
+  useEffect(() => {
+    if (!bookingData.ref) return;
+    buildReceiptFromBooking(bookingData).then(r => {
+      setReceipt(r);
+      setReceiptReady(true);
+    });
+  }, [bookingData.ref]);
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10 text-center">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24">
       <BookingSteps current={5} />
 
-      <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center mx-auto mb-5">
-        <CheckCircle size={40} className="text-white" />
-      </div>
-
-      <h1 className="text-2xl font-bold text-foreground mb-2">Réservation confirmée !</h1>
-      <p className="text-muted-foreground mb-8">Votre réservation a été enregistrée avec succès. Un email de confirmation a été envoyé à <strong>{bookingData.email}</strong></p>
-
-      <div className="bg-card border border-border rounded-2xl p-6 mb-6 text-left">
-        <div className="flex items-center justify-between mb-4 pb-4 border-b border-border">
-          <div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">Référence</div>
-            <div className="font-bold text-xl text-primary font-mono">{bookingData.ref || "RES-2025-4891"}</div>
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">Statut</div>
-            <Badge label="Confirmée" color="green" />
-          </div>
+      <div className="text-center mb-8">
+        <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center mx-auto mb-5 shadow-lg shadow-secondary/30">
+          <CheckCircle size={40} className="text-white" />
         </div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2" style={{ fontFamily: "Playfair Display, serif" }}>
+          Paiement confirmé !
+        </h1>
+        <p className="text-muted-foreground max-w-md mx-auto">
+          Votre réservation est enregistrée. Votre reçu officiel SONAPIE avec QR code de vérification est prêt.
+        </p>
+      </div>
 
-        <div className="space-y-3 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Propriété</span>
-            <span className="font-medium text-right">{bookingData.property?.name}</span>
+      {receiptReady && receipt ? (
+        <>
+          <div id="sonapie-receipt-print">
+            <BookingReceiptCard receipt={receipt} />
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Localisation</span>
-            <span className="font-medium">{bookingData.property?.city}</span>
+
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              disabled={downloading}
+              onClick={async () => {
+                if (!receipt) return;
+                setDownloading(true);
+                try {
+                  await downloadReceiptPdf(receipt);
+                } finally {
+                  setDownloading(false);
+                }
+              }}
+              className="flex items-center justify-center gap-2 border border-border py-3 rounded-xl font-medium hover:bg-muted transition-colors disabled:opacity-60"
+            >
+              <Download size={16} />
+              {downloading ? "Téléchargement…" : "Télécharger le reçu"}
+            </button>
+            <button
+              type="button"
+              disabled={sharingWhatsApp}
+              onClick={async () => {
+                if (!receipt) return;
+                setSharingWhatsApp(true);
+                try {
+                  const result = await shareReceiptViaWhatsApp(receipt, bookingData.phone);
+                  if (result === "whatsapp-opened") {
+                    notify?.("WhatsApp ouvert — joignez le PDF téléchargé via l'icône 📎");
+                  } else if (result === "failed") {
+                    notify?.("Impossible d'ouvrir WhatsApp");
+                  }
+                } finally {
+                  setSharingWhatsApp(false);
+                }
+              }}
+              className="flex items-center justify-center gap-2 bg-[#25D366] text-white font-semibold py-3 rounded-xl hover:bg-[#1da851] transition-colors disabled:opacity-60"
+            >
+              <MessageCircle size={16} />
+              {sharingWhatsApp ? "Préparation…" : "Envoyer sur WhatsApp"}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("dashboard-reservations")}
+              className="flex items-center justify-center gap-2 border border-secondary text-secondary py-3 rounded-xl font-medium hover:bg-green-50 transition-colors"
+            >
+              Mes réservations
+            </button>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Arrivée</span>
-            <span className="font-medium">{bookingData.checkIn}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Départ</span>
-            <span className="font-medium">{bookingData.checkOut}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Voyageurs</span>
-            <span className="font-medium">{bookingData.guests}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Mode de paiement</span>
-            <span className="font-medium">{methodLabels[bookingData.paymentMethod] || "—"}</span>
-          </div>
-          <div className="flex justify-between border-t border-border pt-3 mt-2 font-bold text-foreground">
-            <span>Total payé</span>
-            <span className="text-primary">{fmt(bookingData.grandTotal || 0)}</span>
-          </div>
+
+          <p className="text-xs text-center text-muted-foreground mt-4 flex items-center justify-center gap-1.5">
+            <Shield size={12} className="text-secondary" />
+            Présentez le QR code à la réception pour valider votre arrivée
+          </p>
+        </>
+      ) : (
+        <div className="text-center py-12 text-muted-foreground animate-pulse">
+          Génération de votre reçu sécurisé…
         </div>
-      </div>
+      )}
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <button onClick={() => downloadReceipt({ ref: bookingData.ref || "RES-2025-4891", property: bookingData.property?.name, total: bookingData.grandTotal, client: `${bookingData.firstName} ${bookingData.lastName}` })}
-          className="flex-1 border border-secondary text-secondary py-3 rounded-xl font-medium hover:bg-green-50 transition-colors flex items-center justify-center gap-2">
-          <Download size={16} /> Télécharger le reçu
-        </button>
-        <button onClick={() => navigate("dashboard-reservations")} className="flex-1 border border-border py-3 rounded-xl font-medium hover:bg-muted transition-colors">
-          Mes réservations
-        </button>
-        <button onClick={() => navigate("home")} className="flex-1 bg-primary text-white font-bold py-3 rounded-xl hover:bg-orange-700 transition-colors">
-          Retour à l'accueil
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => navigate("home")}
+        className="w-full mt-6 bg-primary text-white font-bold py-3 rounded-xl hover:bg-orange-700 transition-colors"
+      >
+        Retour à l&apos;accueil
+      </button>
     </div>
   );
 };
@@ -2570,7 +2659,7 @@ const DashboardPage = ({ navigate, user, setUser, activeSub, favorites, toggleFa
                           <button onClick={() => { setReservations(prev => prev.map(x => x.id === r.id ? { ...x, status: "cancelled" } : x)); notify("Réservation annulée"); }}
                             className="text-xs font-medium border border-red-200 text-red-600 rounded-lg px-3 py-2 hover:bg-red-50 transition-colors">Annuler</button>
                         )}
-                        <button onClick={() => downloadReceipt({ ref: r.id, property: r.property, total: r.total, client: user?.name })}
+                        <button onClick={() => printReceiptByRef({ ref: r.id, propertyId: r.propertyId, property: r.property, city: r.city, checkIn: r.checkIn, checkOut: r.checkOut, guests: r.guests, total: r.total, client: r.client || user?.name, phone: user?.phone, email: user?.email })}
                           className="text-xs font-medium border border-green-200 text-green-700 rounded-lg px-3 py-2 hover:bg-green-50 transition-colors flex items-center gap-1"><Download size={12}/>Reçu</button>
                       </div>
                     </div>
@@ -2620,7 +2709,7 @@ const DashboardPage = ({ navigate, user, setUser, activeSub, favorites, toggleFa
                       <div className="text-xs text-muted-foreground">{d.type} · {d.date} · {d.ref}</div>
                     </div>
                   </div>
-                  <button onClick={() => { downloadReceipt({ ref: d.ref, property: d.name, client: user?.name }); notify("Document téléchargé"); }}
+                  <button onClick={() => { printReceiptByRef({ ref: d.ref, property: d.name, client: user?.name }); notify("Document téléchargé"); }}
                     className="text-xs font-medium border border-green-200 text-green-700 rounded-lg px-3 py-2 hover:bg-green-50 flex items-center gap-1 shrink-0"><Download size={12}/>Télécharger</button>
                 </div>
               ))}
@@ -2701,7 +2790,7 @@ const DashboardPage = ({ navigate, user, setUser, activeSub, favorites, toggleFa
                   <div className="text-right shrink-0">
                     <div className="font-bold text-foreground">{fmt(p.amount)}</div>
                     <StatusBadge status={p.status} />
-                    <button onClick={() => { downloadReceipt({ ref: p.ref, property: p.for, total: p.amount, client: user?.name }); notify("Reçu téléchargé"); }}
+                    <button onClick={() => { printReceiptByRef({ ref: p.ref, property: p.for, total: p.amount, client: user?.name }); notify("Reçu téléchargé"); }}
                       className="mt-2 text-xs text-green-700 hover:underline flex items-center gap-1 justify-end"><Download size={11}/>Reçu</button>
                   </div>
                 </div>
@@ -2860,7 +2949,7 @@ const DashboardPage = ({ navigate, user, setUser, activeSub, favorites, toggleFa
                 </button>
               ))}
             </div>
-            <div className="bg-card border border-border rounded-2xl shadow-sm p-6 lg:p-8">
+            <div className="bg-card border border-border rounded-2xl shadow-sm p-4 sm:p-6 lg:p-8">
               {renderContent()}
             </div>
           </div>
@@ -2871,19 +2960,57 @@ const DashboardPage = ({ navigate, user, setUser, activeSub, favorites, toggleFa
 };
 
 // ── Admin Layout & Pages ───────────────────────────────────────────────────────
-const AdminTopBar = ({ user, activePage, setUser, navigate }: { user: any; activePage: Page; setUser: (u: any) => void; navigate: (p: Page) => void }) => {
+const ADMIN_NAV_LINKS = [
+  { id: "admin", label: "Dashboard", icon: BarChart2 },
+  { id: "admin-properties", label: "Biens", icon: Building2 },
+  { id: "admin-reservations", label: "Réservations", icon: Calendar },
+  { id: "admin-verify", label: "Contrôle arrivée", icon: ShieldCheck },
+  { id: "admin-users", label: "Utilisateurs", icon: User },
+  { id: "admin-payments", label: "Paiements", icon: CreditCard },
+  { id: "admin-maintenance", label: "Maintenance", icon: Wrench },
+  { id: "admin-claims", label: "Réclamations", icon: AlertCircle },
+  { id: "admin-stats", label: "Statistiques", icon: TrendingUp },
+  { id: "admin-settings", label: "Paramètres", icon: Settings },
+] as const;
+
+const AdminTopBar = ({
+  user, activePage, setUser, navigate, onOpenMenu,
+}: {
+  user: any;
+  activePage: Page;
+  setUser: (u: any) => void;
+  navigate: (p: Page) => void;
+  onOpenMenu: () => void;
+}) => {
   const pageLabels: Record<string, string> = {
-    admin: "Tableau de bord", "admin-properties": "Biens", "admin-reservations": "Réservations",
-    "admin-users": "Utilisateurs", "admin-payments": "Paiements", "admin-maintenance": "Maintenance",
-    "admin-claims": "Réclamations", "admin-stats": "Statistiques", "admin-settings": "Paramètres",
+    admin: "Tableau de bord",
+    "admin-properties": "Biens",
+    "admin-reservations": "Réservations",
+    "admin-verify": "Contrôle arrivée",
+    "admin-users": "Utilisateurs",
+    "admin-payments": "Paiements",
+    "admin-maintenance": "Maintenance",
+    "admin-claims": "Réclamations",
+    "admin-stats": "Statistiques",
+    "admin-settings": "Paramètres",
   };
   return (
-    <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-sm border-b border-border px-6 py-4 flex items-center justify-between">
-      <div>
-        <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">Administration</p>
-        <h2 className="text-lg font-bold text-foreground">{pageLabels[activePage] || APP_NAME_SHORT}</h2>
+    <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={onOpenMenu}
+          className="lg:hidden w-10 h-10 rounded-xl border border-border flex items-center justify-center hover:bg-muted shrink-0"
+          aria-label="Ouvrir le menu"
+        >
+          <Menu size={18} />
+        </button>
+        <div className="min-w-0">
+          <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-widest font-medium">Administration</p>
+          <h2 className="text-base sm:text-lg font-bold text-foreground truncate">{pageLabels[activePage] || APP_NAME_SHORT}</h2>
+        </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         <button className="w-9 h-9 rounded-xl border border-border flex items-center justify-center hover:bg-muted transition-colors relative">
           <Bell size={16} className="text-muted-foreground" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
@@ -2895,7 +3022,7 @@ const AdminTopBar = ({ user, activePage, setUser, navigate }: { user: any; activ
             <div className="text-xs text-muted-foreground">Administrateur</div>
           </div>
         </div>
-        <button onClick={() => { setUser(null); navigate("home"); }} className="text-sm text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+        <button onClick={() => { setUser(null); navigate("home"); }} className="text-sm text-red-600 hover:bg-red-50 px-2 sm:px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5">
           <LogOut size={14} /> <span className="hidden sm:inline">Déconnexion</span>
         </button>
       </div>
@@ -2903,44 +3030,67 @@ const AdminTopBar = ({ user, activePage, setUser, navigate }: { user: any; activ
   );
 };
 
-const AdminSidebar = ({ navigate, activePage }: { navigate: (p: Page) => void; activePage: Page }) => {
-  const links = [
-    { id: "admin", label: "Dashboard", icon: BarChart2 },
-    { id: "admin-properties", label: "Biens", icon: Building2 },
-    { id: "admin-reservations", label: "Réservations", icon: Calendar },
-    { id: "admin-users", label: "Utilisateurs", icon: User },
-    { id: "admin-payments", label: "Paiements", icon: CreditCard },
-    { id: "admin-maintenance", label: "Maintenance", icon: Wrench },
-    { id: "admin-claims", label: "Réclamations", icon: AlertCircle },
-    { id: "admin-stats", label: "Statistiques", icon: TrendingUp },
-    { id: "admin-settings", label: "Paramètres", icon: Settings },
-  ];
+const AdminSidebar = ({
+  navigate, activePage, mobileOpen, onClose,
+}: {
+  navigate: (p: Page) => void;
+  activePage: Page;
+  mobileOpen: boolean;
+  onClose: () => void;
+}) => {
+  const go = (id: string) => {
+    navigate(id as Page);
+    onClose();
+  };
 
-  return (
-    <div className="w-64 bg-[#14261A] min-h-screen flex flex-col shrink-0 border-r border-white/5">
-      <div className="p-5 border-b border-white/10">
+  const NavContent = ({ showClose }: { showClose?: boolean }) => (
+    <>
+      <div className="p-5 border-b border-white/10 flex items-center justify-between gap-2">
         <AppLogo variant="admin" />
+        {showClose && (
+          <button type="button" onClick={onClose} className="lg:hidden text-white/70 hover:text-white p-1" aria-label="Fermer">
+            <X size={20} />
+          </button>
+        )}
       </div>
-      <nav className="flex-1 p-3 space-y-1">
-        {links.map(({ id, label, icon: Icon }) => (
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {ADMIN_NAV_LINKS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
-            onClick={() => navigate(id as Page)}
+            onClick={() => go(id)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left
               ${activePage === id
                 ? "bg-primary text-white shadow-md shadow-primary/30"
                 : "text-white/70 hover:bg-white/10 hover:text-white"}`}
           >
-            <Icon size={16} />{label}
+            <Icon size={16} className="shrink-0" />
+            <span className="truncate">{label}</span>
           </button>
         ))}
       </nav>
       <div className="p-3 border-t border-white/10">
-        <button onClick={() => navigate("home")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/60 hover:bg-white/10 hover:text-white transition-colors">
+        <button onClick={() => go("home")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/60 hover:bg-white/10 hover:text-white transition-colors">
           <Globe size={16} /> Retour au site public
         </button>
       </div>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      <div className="hidden lg:flex w-64 bg-[#14261A] min-h-screen flex-col shrink-0 border-r border-white/5">
+        <NavContent />
+      </div>
+
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <button type="button" className="absolute inset-0 bg-black/50" onClick={onClose} aria-label="Fermer le menu" />
+          <div className="relative w-[min(18rem,88vw)] bg-[#14261A] h-full flex flex-col shadow-2xl">
+            <NavContent showClose />
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
@@ -2955,9 +3105,9 @@ const AdminDashboard = ({ navigate, reservations, properties }: { navigate: (p: 
   ];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Tableau de bord" subtitle="Vue d'ensemble — Juin 2025">
-        <button onClick={() => downloadReceipt({ ref: "RAPPORT-2025-06", property: "Rapport mensuel SONAPIE", client: "Administration" })}
+        <button onClick={() => printReceiptByRef({ ref: "RAPPORT-2025-06", property: "Rapport mensuel SONAPIE", client: "Administration" })}
           className="flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-orange-700 transition-colors shadow-md shadow-primary/20">
           <Download size={14} /> Rapport PDF
         </button>
@@ -3186,7 +3336,7 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Gestion des biens" subtitle={`${properties.length} biens patrimoniaux`}>
         <button onClick={() => { setEditProp(null); setForm(emptyPropertyForm()); setUploadedUrls([]); setShowAdd(true); }}
           className="flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-orange-700 transition-colors shadow-md shadow-primary/20">
@@ -3404,7 +3554,8 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
       )}
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[36rem]">
           <thead className="bg-muted border-b border-border">
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Bien</th>
@@ -3452,6 +3603,7 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -3468,7 +3620,7 @@ const AdminReservationsPage = ({ reservations, setReservations, notify }: {
   const filtered = filter === "all" ? all : all.filter(r => r.status === filter);
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Gestion des réservations" subtitle={`${filtered.length} réservation(s)`} />
 
       <div className="flex gap-2 flex-wrap">
@@ -3487,7 +3639,8 @@ const AdminReservationsPage = ({ reservations, setReservations, notify }: {
       </div>
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[40rem]">
           <thead className="bg-muted border-b border-border">
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Référence</th>
@@ -3524,7 +3677,7 @@ const AdminReservationsPage = ({ reservations, setReservations, notify }: {
                       </>
                     )}
                     {r.status === "confirmed" && (
-                      <button onClick={e => { e.stopPropagation(); downloadReceipt({ ref: r.id, property: r.property, total: r.total, client: r.client }); }}
+                      <button onClick={e => { e.stopPropagation(); printReceiptByRef({ ref: r.id, property: r.property, total: r.total, client: r.client }); }}
                         className="px-2 py-1 bg-green-50 text-green-600 rounded-lg text-xs font-semibold hover:bg-green-100 transition-colors flex items-center gap-1">
                         <Download size={11} /> Reçu
                       </button>
@@ -3535,6 +3688,7 @@ const AdminReservationsPage = ({ reservations, setReservations, notify }: {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {selected && (
@@ -3582,7 +3736,7 @@ const AdminSettingsPage = ({ settings, setSettings, notify }: {
     notify("Paramètres enregistrés");
   };
   return (
-  <div className="p-6 lg:p-8 space-y-6 max-w-2xl">
+  <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-2xl">
     <AdminPageHeader title="Paramètres" subtitle="Configuration de la plateforme" />
     <div className="bg-card border border-border rounded-2xl p-6 space-y-5 shadow-sm">
       <div>
@@ -3625,10 +3779,11 @@ const AdminUsersPage = ({ users, setUsers, notify }: {
   };
 
   return (
-  <div className="p-6 lg:p-8 space-y-6">
+  <div className="p-4 sm:p-6 lg:p-8 space-y-6">
     <AdminPageHeader title="Gestion des utilisateurs" subtitle={`${users.length} comptes enregistrés`} />
     <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[36rem]">
         <thead className="bg-muted border-b border-border">
           <tr>
             <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Utilisateur</th>
@@ -3671,6 +3826,7 @@ const AdminUsersPage = ({ users, setUsers, notify }: {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
     {selected && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
@@ -3703,7 +3859,7 @@ const AdminPaymentsPage = ({ notify }: { notify: NotifyFn }) => {
   ];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Gestion des paiements" subtitle="Suivi des transactions" />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
@@ -3719,7 +3875,8 @@ const AdminPaymentsPage = ({ notify }: { notify: NotifyFn }) => {
         ))}
       </div>
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[32rem]">
           <thead className="bg-muted border-b border-border">
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Référence</th>
@@ -3738,12 +3895,13 @@ const AdminPaymentsPage = ({ notify }: { notify: NotifyFn }) => {
                 <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{p.method}</td>
                 <td className="px-4 py-3 font-bold text-primary">{fmt(p.amount)}</td>
                 <td className="px-4 py-3"><StatusBadge status={p.status === "refunded" ? "cancelled" : p.status} /></td>
-                <td className="px-4 py-3"><button onClick={() => { downloadReceipt({ ref: p.ref, property: p.property, total: p.amount, client: p.user }); notify("Reçu téléchargé"); }}
+                <td className="px-4 py-3"><button onClick={() => { printReceiptByRef({ ref: p.ref, property: p.property, total: p.amount, client: p.user }); notify("Reçu téléchargé"); }}
                   className="w-8 h-8 bg-green-50 text-green-600 rounded-lg flex items-center justify-center hover:bg-green-100"><Download size={13} /></button></td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -3777,7 +3935,7 @@ const AdminMaintenancePage = ({ tickets, setTickets, notify }: {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Maintenance" subtitle={`${tickets.filter(t => t.status !== "completed").length} tickets actifs`}>
         <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-orange-700 transition-colors shadow-md shadow-primary/20">
           <Plus size={14} /> Nouveau ticket
@@ -3850,7 +4008,7 @@ const AdminClaimsPage = ({ claims, setClaims, notify }: {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Réclamations" subtitle={`${claims.filter(c => c.status !== "resolved").length} en cours de traitement`} />
       <div className="space-y-4">
         {claims.map(c => (
@@ -3892,7 +4050,7 @@ const AdminClaimsPage = ({ claims, setClaims, notify }: {
 };
 
 const AdminStatsPage = () => (
-  <div className="p-6 lg:p-8 space-y-6">
+  <div className="p-4 sm:p-6 lg:p-8 space-y-6">
     <AdminPageHeader title="Statistiques" subtitle="Analyses et indicateurs de performance" />
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div className="bg-card border border-border rounded-xl p-5">
@@ -4310,10 +4468,39 @@ const ContactPage = ({ navigate, complaints, setComplaints }: {
   );
 };
 
+// ── Reçu & Vérification ───────────────────────────────────────────────────────
+const VerifyReceiptPage = ({ token }: { token?: string }) => (
+  <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24">
+    <PageHeader
+      title="Vérification de reçu"
+      subtitle="Authentifiez un reçu SONAPIE — Patrimoine officiel de l'État de Côte d'Ivoire"
+    />
+    <VerifyReceiptPanel initialToken={token} mode="public" />
+  </div>
+);
+
+const AdminVerifyPage = () => (
+  <div className="p-4 sm:p-6 pb-24">
+    <AdminPageHeader
+      title="Contrôle d'arrivée"
+      subtitle="Scannez le QR code du client pour valider son reçu à la réception"
+    />
+    <div className="max-w-2xl mx-auto lg:mx-0">
+      <VerifyReceiptPanel mode="reception" />
+    </div>
+  </div>
+);
+
 // ── Main App ───────────────────────────────────────────────────────────────────
 export default function App() {
-  const [page, setPage] = useState<Page>("home");
-  const [pageData, setPageData] = useState<any>({});
+  const [page, setPage] = useState<Page>(() => {
+    const token = new URLSearchParams(window.location.search).get("verify");
+    return token ? "verify" : "home";
+  });
+  const [pageData, setPageData] = useState<any>(() => {
+    const token = new URLSearchParams(window.location.search).get("verify");
+    return token ? { verifyToken: token } : {};
+  });
   const [user, setUser] = useState<any>(null);
   const [bookingData, setBookingData] = useState<any>({});
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() => {
@@ -4346,6 +4533,12 @@ export default function App() {
     setToast(message);
     setTimeout(() => setToast(null), 3200);
   };
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("verify")) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -4386,7 +4579,7 @@ export default function App() {
       case "booking-info": return <BookingInfoPage navigate={navigate} bookingData={bookingData} setBookingData={setBookingData} />;
       case "booking-summary": return <BookingSummaryPage navigate={navigate} bookingData={bookingData} />;
       case "booking-payment": return <BookingPaymentPage navigate={navigate} bookingData={bookingData} setBookingData={setBookingData} />;
-      case "booking-confirmation": return <BookingConfirmationPage navigate={navigate} bookingData={bookingData} setReservations={setReservations} user={user} />;
+      case "booking-confirmation": return <BookingConfirmationPage navigate={navigate} bookingData={bookingData} setReservations={setReservations} user={user} notify={notify} />;
       case "dashboard":
       case "dashboard-reservations":
       case "dashboard-favorites":
@@ -4409,11 +4602,15 @@ export default function App() {
       case "admin-claims": return <AdminClaimsPage claims={adminClaims} setClaims={setAdminClaims} notify={notify} />;
       case "admin-stats": return <AdminStatsPage />;
       case "admin-settings": return <AdminSettingsPage settings={platformSettings} setSettings={setPlatformSettings} notify={notify} />;
+      case "admin-verify": return <AdminVerifyPage />;
+      case "verify": return <VerifyReceiptPage token={pageData.verifyToken} />;
       case "about": return <AboutPage navigate={navigate} />;
       case "contact": return <ContactPage navigate={navigate} complaints={complaints} setComplaints={setComplaints} />;
       default: return <HomePage navigate={navigate} filters={catalogueFilters} setFilters={setCatalogueFilters} favorites={favorites} toggleFavorite={toggleFavorite} properties={properties} />;
     }
   };
+
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
 
   if (isAdmin) {
     if (!user?.isAdmin) {
@@ -4425,11 +4622,22 @@ export default function App() {
       );
     }
     return (
-      <div className="flex min-h-screen bg-muted/30">
-        <AdminSidebar navigate={navigate} activePage={page} />
-        <div className="flex-1 flex flex-col min-w-0">
-          <AdminTopBar user={user} activePage={page} setUser={setUser} navigate={navigate} />
-          <main className="flex-1 overflow-auto">
+      <div className="flex min-h-screen bg-muted/30 overflow-x-hidden">
+        <AdminSidebar
+          navigate={navigate}
+          activePage={page}
+          mobileOpen={adminMenuOpen}
+          onClose={() => setAdminMenuOpen(false)}
+        />
+        <div className="flex-1 flex flex-col min-w-0 w-full">
+          <AdminTopBar
+            user={user}
+            activePage={page}
+            setUser={setUser}
+            navigate={navigate}
+            onOpenMenu={() => setAdminMenuOpen(true)}
+          />
+          <main className="flex-1 overflow-x-hidden overflow-y-auto">
             {renderPage()}
           </main>
         </div>
@@ -4439,9 +4647,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden">
       <Header navigate={navigate} currentPage={page} user={user} setUser={setUser} />
-      <main className="flex-1">
+      <main className="flex-1 min-w-0">
         {renderPage()}
       </main>
       {!isDashboard && <Footer navigate={navigate} />}
