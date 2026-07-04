@@ -115,7 +115,7 @@ export function PropertyMap({ properties, onSelect, selectedId }: PropertyMapPro
   }, [properties, selectedId]);
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden sticky top-24">
+    <div className="bg-card border border-border rounded-xl overflow-hidden lg:sticky lg:top-24">
       <div ref={containerRef} className="h-80 w-full z-0" />
       <div className="p-3 border-t border-border bg-muted/30">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">

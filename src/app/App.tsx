@@ -686,20 +686,15 @@ const Header = ({ navigate, currentPage, user, setUser }: NavProps) => {
             ) : (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => navigate("catalogue")}
-                  className="hidden sm:block text-sm font-semibold text-secondary border border-secondary px-3 py-2 rounded-lg hover:bg-green-50 transition-colors"
-                >
-                  Réserver
-                </button>
-                <button
                   onClick={() => navigate("login")}
-                  className="text-sm font-medium text-foreground hover:text-primary transition-colors px-3 py-2"
+                  className="text-sm font-medium text-foreground hover:text-primary transition-colors px-2 py-2"
                 >
-                  Connexion
+                  <span className="hidden sm:inline">Connexion</span>
+                  <User size={18} className="sm:hidden" />
                 </button>
                 <button
                   onClick={() => navigate("register")}
-                  className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+                  className="bg-primary text-white text-sm font-semibold px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
                 >
                   S'inscrire
                 </button>
@@ -717,17 +712,24 @@ const Header = ({ navigate, currentPage, user, setUser }: NavProps) => {
             {[
               { label: "Accueil", page: "home" as Page },
               { label: "Catalogue", page: "catalogue" as Page },
+              { label: "Réserver", page: "catalogue" as Page },
               { label: "À propos", page: "about" as Page },
               { label: "Contact", page: "contact" as Page },
             ].map(({ label, page }) => (
               <button
-                key={page}
+                key={`${label}-${page}`}
                 onClick={() => { navigate(page); setMenuOpen(false); }}
-                className="text-sm font-medium py-2 px-3 rounded-lg text-left hover:bg-muted transition-colors"
+                className={`text-sm font-medium py-2.5 px-3 rounded-lg text-left hover:bg-muted transition-colors ${label === "Réserver" ? "text-secondary font-semibold" : ""}`}
               >
                 {label}
               </button>
             ))}
+            {!user && (
+              <div className="flex gap-2 px-3 pt-3 mt-2 border-t border-border">
+                <button onClick={() => { navigate("login"); setMenuOpen(false); }} className="flex-1 border border-border py-2.5 rounded-lg text-sm font-medium">Connexion</button>
+                <button onClick={() => { navigate("register"); setMenuOpen(false); }} className="flex-1 bg-primary text-white py-2.5 rounded-lg text-sm font-semibold">S'inscrire</button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -738,7 +740,7 @@ const Header = ({ navigate, currentPage, user, setUser }: NavProps) => {
 // ── Footer ─────────────────────────────────────────────────────────────────────
 const Footer = ({ navigate }: { navigate: (p: Page) => void }) => (
   <footer className="bg-[#14261A] text-white mt-16">
-    <div className="max-w-7xl mx-auto px-6 py-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
         <div>
           <AppLogo variant="footer" />
@@ -850,7 +852,7 @@ const HeroSelect = ({
 
   return (
     <div className="relative w-full">
-      <span className={`block text-sm font-medium leading-snug pr-5 whitespace-nowrap ${selected ? "text-foreground" : "text-muted-foreground"}`}>
+      <span className={`block text-sm font-medium leading-snug pr-5 truncate ${selected ? "text-foreground" : "text-muted-foreground"}`}>
         {display}
       </span>
       <select
@@ -1025,70 +1027,8 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
                 </button>
               </div>
 
-              {/* Tablette / petit desktop — 2 lignes */}
-              <div className="hidden md:flex xl:hidden flex-col">
-                <div className="flex items-stretch">
-                  <HeroSearchField icon={MapPin} label="Destination" fieldClass="min-w-[9rem]">
-                    <HeroSelect
-                      value={searchCity}
-                      onChange={setSearchCity}
-                      options={[
-                        { value: "", label: "Toutes les villes" },
-                        ...CITIES.map(c => ({ value: c, label: c })),
-                      ]}
-                    />
-                  </HeroSearchField>
-                  <div className="w-px bg-border self-stretch my-3" />
-                  <HeroSearchField icon={Building2} label="Type de bien" fieldClass="min-w-[10rem] flex-[1.2]">
-                    <HeroSelect
-                      value={searchType}
-                      onChange={setSearchType}
-                      options={TYPES.map(t => ({ value: t, label: t }))}
-                    />
-                  </HeroSearchField>
-                  <div className="w-px bg-border self-stretch my-3" />
-                  <HeroSearchField icon={Calendar} label="Arrivée" fieldClass="min-w-[8.5rem]">
-                    <HeroDateInput value={searchCheckIn} onChange={setSearchCheckIn} />
-                  </HeroSearchField>
-                  <div className="w-px bg-border self-stretch my-3" />
-                  <HeroSearchField icon={Calendar} label="Départ" fieldClass="min-w-[8.5rem]">
-                    <HeroDateInput value={searchCheckOut} onChange={setSearchCheckOut} min={searchCheckIn || undefined} />
-                  </HeroSearchField>
-                </div>
-                <div className="flex items-stretch border-t border-border">
-                  <HeroSearchField icon={Users} label="Capacité" fieldClass="min-w-[10rem] flex-[1.2]">
-                    <HeroSelect
-                      value={searchCapacity}
-                      onChange={setSearchCapacity}
-                      options={[
-                        { value: "", label: "Tous les effectifs" },
-                        { value: "1-5 personnes", label: "1-5 personnes" },
-                        { value: "6-20 personnes", label: "6-20 personnes" },
-                        { value: "21-100 personnes", label: "21-100 personnes" },
-                        { value: "100+ personnes", label: "100+ personnes" },
-                      ]}
-                    />
-                  </HeroSearchField>
-                  <div className="w-px bg-border self-stretch my-3" />
-                  <HeroSearchField icon={CreditCard} label="Budget max" fieldClass="min-w-[12rem] flex-[1.5]">
-                    <HeroSelect
-                      value={searchBudget}
-                      onChange={v => setSearchBudget(+v)}
-                      options={BUDGET_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
-                    />
-                  </HeroSearchField>
-                  <button
-                    onClick={handleSearch}
-                    className="shrink-0 flex items-center justify-center gap-2 bg-primary text-white font-semibold px-5 hover:bg-orange-700 transition-colors"
-                  >
-                    <Search size={18} />
-                    Rechercher
-                  </button>
-                </div>
-              </div>
-
-              {/* Mobile — grille empilée */}
-              <div className="md:hidden p-3 space-y-2">
+              {/* Tablette & mobile — grille empilée */}
+              <div className="xl:hidden p-3 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   <div className="rounded-xl bg-muted px-3 py-2.5">
                     <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Destination</div>
@@ -1146,7 +1086,7 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
       </section>
 
       {/* Featured properties */}
-      <section className="max-w-7xl mx-auto px-6 py-16">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
         <div className="flex items-end justify-between mb-8">
           <div>
             <p className="text-primary text-sm font-semibold uppercase tracking-widest mb-2">Sélection Exclusive</p>
@@ -1174,7 +1114,7 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
 
       {/* Destinations */}
       <section className="bg-muted py-16">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10">
             <p className="text-primary text-sm font-semibold uppercase tracking-widest mb-2">Explorer</p>
             <h2 className="text-3xl font-bold text-foreground">Nos Destinations</h2>
@@ -1201,7 +1141,7 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
       </section>
 
       {/* Why SONAPIE */}
-      <section className="max-w-7xl mx-auto px-6 py-16">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div>
             <p className="text-primary text-sm font-semibold uppercase tracking-widest mb-2">Pourquoi nous choisir</p>
@@ -1267,6 +1207,77 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
 };
 
 // ── Catalogue Page ─────────────────────────────────────────────────────────────
+const CatalogueFiltersPanel = ({
+  filterCity, setFilterCity, filterType, setFilterType, filterCapacity, setFilterCapacity,
+  filterAmenity, setFilterAmenity, filterAvail, setFilterAvail, maxPrice, setMaxPrice,
+  setFilters, onClose,
+}: {
+  filterCity: string; setFilterCity: (v: string) => void;
+  filterType: string; setFilterType: (v: string) => void;
+  filterCapacity: string; setFilterCapacity: (v: string) => void;
+  filterAmenity: string; setFilterAmenity: (v: string) => void;
+  filterAvail: boolean; setFilterAvail: (v: boolean) => void;
+  maxPrice: number; setMaxPrice: (v: number) => void;
+  setFilters: (f: CatalogueFilters) => void;
+  onClose?: () => void;
+}) => (
+  <div className="space-y-5">
+    <div className="flex items-center justify-between mb-1">
+      <h3 className="font-semibold text-foreground">Filtres</h3>
+      <button onClick={() => { setFilterCity("Toutes"); setFilterType("Toutes catégories"); setFilterCapacity(""); setFilterAmenity("Tous"); setFilterAvail(false); setMaxPrice(100000); setFilters(DEFAULT_FILTERS); }} className="text-xs text-primary hover:underline">
+        Réinitialiser
+      </button>
+    </div>
+    <div>
+      <label className="text-sm font-medium text-foreground mb-2 block">Ville</label>
+      <div className="space-y-1.5">
+        {["Toutes", ...CITIES].map(c => (
+          <label key={c} className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="city" checked={filterCity === c} onChange={() => setFilterCity(c)} className="accent-primary" />
+            <span className="text-sm text-foreground">{c}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+    <div>
+      <label className="text-sm font-medium text-foreground mb-2 block">Type de bien</label>
+      <select className="w-full text-sm bg-input-background border border-border rounded-lg px-3 py-2 outline-none" value={filterType} onChange={e => setFilterType(e.target.value)}>
+        {TYPES.map(t => <option key={t}>{t}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="text-sm font-medium text-foreground mb-2 block">Capacité</label>
+      <select value={filterCapacity} onChange={e => setFilterCapacity(e.target.value)} className="w-full text-sm bg-input-background border border-border rounded-lg px-3 py-2 outline-none">
+        <option value="">Toutes</option>
+        <option>1-5 personnes</option>
+        <option>6-20 personnes</option>
+        <option>21-100 personnes</option>
+        <option>100+ personnes</option>
+      </select>
+    </div>
+    <div>
+      <label className="text-sm font-medium text-foreground mb-2 block">Équipements</label>
+      <select value={filterAmenity} onChange={e => setFilterAmenity(e.target.value)} className="w-full text-sm bg-input-background border border-border rounded-lg px-3 py-2 outline-none">
+        {AMENITY_FILTERS.map(a => <option key={a}>{a}</option>)}
+      </select>
+    </div>
+    <div>
+      <label className="text-sm font-medium text-foreground mb-2 block">Prix max: {fmt(maxPrice)}</label>
+      <input type="range" min={10000} max={100000} step={5000} value={maxPrice} onChange={e => setMaxPrice(+e.target.value)} className="w-full accent-primary" />
+      <div className="flex justify-between text-xs text-muted-foreground mt-1"><span>10k</span><span>100k FCFA</span></div>
+    </div>
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" checked={filterAvail} onChange={e => setFilterAvail(e.target.checked)} className="accent-primary" />
+      <span className="text-sm font-medium">Disponibles uniquement</span>
+    </label>
+    {onClose && (
+      <button onClick={onClose} className="w-full bg-primary text-white font-semibold py-2.5 rounded-xl hover:bg-orange-700 transition-colors text-sm">
+        Appliquer les filtres
+      </button>
+    )}
+  </div>
+);
+
 const CataloguePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, properties }: {
   navigate: (p: Page, d?: any) => void;
   filters: CatalogueFilters;
@@ -1320,116 +1331,78 @@ const CataloguePage = ({ navigate, filters, setFilters, favorites, toggleFavorit
           <h1 className="text-2xl font-bold text-foreground">Catalogue des biens</h1>
           <p className="text-muted-foreground text-sm mt-1">{filtered.length} biens disponibles</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto">
+          <div className="relative flex-1 min-w-[140px] sm:flex-none">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
               value={searchName}
               onChange={e => setSearchName(e.target.value)}
-              placeholder="Rechercher un établissement…"
-              className="pl-9 pr-3 py-2 text-sm border border-border rounded-lg w-56 sm:w-64 outline-none focus:ring-2 focus:ring-primary/30"
+              placeholder="Rechercher…"
+              className="pl-9 pr-3 py-2 text-sm border border-border rounded-lg w-full sm:w-56 outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
           <button
             onClick={() => setShowMap(!showMap)}
-            className={`hidden lg:flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium transition-colors ${showMap ? "bg-secondary text-white border-secondary" : "hover:bg-muted"}`}
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 border border-border rounded-lg text-sm font-medium transition-colors ${showMap ? "bg-secondary text-white border-secondary" : "hover:bg-muted"}`}
           >
             <Map size={15} /> Carte
           </button>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+            className={`lg:hidden flex items-center gap-2 px-3 sm:px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${showFilters ? "bg-primary text-white border-primary" : "border-border hover:bg-muted"}`}
           >
             <Filter size={15} /> Filtres
           </button>
           <div className="flex border border-border rounded-lg overflow-hidden">
-            <button onClick={() => setViewMode("grid")} className={`p-2 ${viewMode === "grid" ? "bg-primary text-white" : "hover:bg-muted"} transition-colors`}>
+            <button onClick={() => setViewMode("grid")} className={`p-2 ${viewMode === "grid" ? "bg-primary text-white" : "hover:bg-muted"} transition-colors`} aria-label="Grille">
               <Grid size={16} />
             </button>
-            <button onClick={() => setViewMode("list")} className={`p-2 ${viewMode === "list" ? "bg-primary text-white" : "hover:bg-muted"} transition-colors`}>
+            <button onClick={() => setViewMode("list")} className={`p-2 ${viewMode === "list" ? "bg-primary text-white" : "hover:bg-muted"} transition-colors`} aria-label="Liste">
               <List size={16} />
             </button>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-8">
-        {/* Sidebar filters */}
-        <aside className={`shrink-0 w-56 ${showFilters ? "block" : "hidden lg:block"}`}>
+      {/* Filtres mobile — tiroir */}
+      {showFilters && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowFilters(false)} aria-hidden="true" />
+          <aside className="relative ml-auto w-[min(20rem,92vw)] h-full bg-card shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="font-bold text-foreground">Filtres</h3>
+              <button onClick={() => setShowFilters(false)} className="w-9 h-9 bg-muted rounded-full flex items-center justify-center"><X size={16} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              <CatalogueFiltersPanel
+                filterCity={filterCity} setFilterCity={setFilterCity}
+                filterType={filterType} setFilterType={setFilterType}
+                filterCapacity={filterCapacity} setFilterCapacity={setFilterCapacity}
+                filterAmenity={filterAmenity} setFilterAmenity={setFilterAmenity}
+                filterAvail={filterAvail} setFilterAvail={setFilterAvail}
+                maxPrice={maxPrice} setMaxPrice={setMaxPrice}
+                setFilters={setFilters}
+                onClose={() => setShowFilters(false)}
+              />
+            </div>
+          </aside>
+        </div>
+      )}
+
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+        {/* Sidebar filtres desktop */}
+        <aside className="hidden lg:block shrink-0 w-56">
           <div className="bg-card rounded-xl border border-border p-5 sticky top-24">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground">Filtres</h3>
-              <button onClick={() => { setFilterCity("Toutes"); setFilterType("Toutes catégories"); setFilterCapacity(""); setFilterAmenity("Tous"); setFilterAvail(false); setMaxPrice(100000); setFilters(DEFAULT_FILTERS); }} className="text-xs text-primary hover:underline">
-                Réinitialiser
-              </button>
-            </div>
-
-            <div className="space-y-5">
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Ville</label>
-                <div className="space-y-1.5">
-                  {["Toutes", ...CITIES].map(c => (
-                    <label key={c} className="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" name="city" checked={filterCity === c} onChange={() => setFilterCity(c)} className="accent-primary" />
-                      <span className="text-sm text-foreground">{c}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Type de bien</label>
-                <select
-                  className="w-full text-sm bg-input-background border border-border rounded-lg px-3 py-2 outline-none"
-                  value={filterType}
-                  onChange={e => setFilterType(e.target.value)}
-                >
-                  {TYPES.map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Capacité</label>
-                <select value={filterCapacity} onChange={e => setFilterCapacity(e.target.value)}
-                  className="w-full text-sm bg-input-background border border-border rounded-lg px-3 py-2 outline-none">
-                  <option value="">Toutes</option>
-                  <option>1-5 personnes</option>
-                  <option>6-20 personnes</option>
-                  <option>21-100 personnes</option>
-                  <option>100+ personnes</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Équipements</label>
-                <select value={filterAmenity} onChange={e => setFilterAmenity(e.target.value)}
-                  className="w-full text-sm bg-input-background border border-border rounded-lg px-3 py-2 outline-none">
-                  {AMENITY_FILTERS.map(a => <option key={a}>{a}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">
-                  Prix max: {fmt(maxPrice)}
-                </label>
-                <input
-                  type="range" min={10000} max={100000} step={5000}
-                  value={maxPrice} onChange={e => setMaxPrice(+e.target.value)}
-                  className="w-full accent-primary"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>50k</span><span>300k FCFA</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={filterAvail} onChange={e => setFilterAvail(e.target.checked)} className="accent-primary" />
-                  <span className="text-sm font-medium">Disponibles uniquement</span>
-                </label>
-              </div>
-            </div>
+            <CatalogueFiltersPanel
+              filterCity={filterCity} setFilterCity={setFilterCity}
+              filterType={filterType} setFilterType={setFilterType}
+              filterCapacity={filterCapacity} setFilterCapacity={setFilterCapacity}
+              filterAmenity={filterAmenity} setFilterAmenity={setFilterAmenity}
+              filterAvail={filterAvail} setFilterAvail={setFilterAvail}
+              maxPrice={maxPrice} setMaxPrice={setMaxPrice}
+              setFilters={setFilters}
+            />
           </div>
         </aside>
 
@@ -1475,10 +1448,10 @@ const CataloguePage = ({ navigate, filters, setFilters, favorites, toggleFavorit
               {filtered.map(p => (
                 <div
                   key={p.id}
-                  className="bg-card border border-border rounded-xl overflow-hidden flex cursor-pointer hover:shadow-md transition-all group"
+                  className="bg-card border border-border rounded-xl overflow-hidden flex flex-col sm:flex-row cursor-pointer hover:shadow-md transition-all group"
                   onClick={() => navigate("property", { property: p })}
                 >
-                  <div className="relative w-56 sm:w-64 h-40 sm:h-44 shrink-0 bg-muted overflow-hidden">
+                  <div className="relative w-full sm:w-56 md:w-64 h-44 sm:min-h-[10rem] shrink-0 bg-muted overflow-hidden">
                     <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     {!p.available && (
                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -1486,9 +1459,9 @@ const CataloguePage = ({ navigate, filters, setFilters, favorites, toggleFavorit
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 p-5 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div>
+                  <div className="flex-1 p-4 sm:p-5 min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
                           <MapPin size={11} />{p.city} · {p.type}
                         </div>
@@ -1496,7 +1469,7 @@ const CataloguePage = ({ navigate, filters, setFilters, favorites, toggleFavorit
                         <StarRating rating={p.rating} reviews={p.reviews} />
                         <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{p.description}</p>
                       </div>
-                      <div className="text-right shrink-0 ml-4">
+                      <div className="sm:text-right shrink-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2">
                         <div className="text-lg font-bold text-primary">{fmt(p.price)}</div>
                         <div className="text-xs text-muted-foreground">/ nuit</div>
                         {p.available && (
@@ -1517,7 +1490,7 @@ const CataloguePage = ({ navigate, filters, setFilters, favorites, toggleFavorit
         </div>
 
         {showMap && (
-          <aside className="hidden lg:block w-72 xl:w-80 shrink-0">
+          <aside className="w-full lg:w-72 xl:w-80 shrink-0 order-last lg:order-none">
             <MapPanel properties={filtered} onSelect={p => navigate("property", { property: p })} />
           </aside>
         )}
@@ -1583,7 +1556,7 @@ const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, tog
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-28 lg:pb-8">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
         <button onClick={() => navigate("home")} className="hover:text-primary transition-colors">Accueil</button>
@@ -1756,9 +1729,9 @@ const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, tog
           </div>
         </div>
 
-        {/* Right: Booking widget */}
-        <div>
-          <div className="bg-card border border-border rounded-2xl p-5 sticky top-24 shadow-lg">
+        {/* Réservation */}
+        <div className="order-first lg:order-none">
+          <div className="bg-card border border-border rounded-2xl p-5 lg:sticky lg:top-24 shadow-lg">
             <div className="flex items-baseline gap-1 mb-5">
               <span className="text-2xl font-bold text-primary">{fmt(prop.price)}</span>
               <span className="text-sm text-muted-foreground">/ nuit</span>
@@ -1825,6 +1798,20 @@ const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, tog
           </div>
         </div>
       </div>
+
+      {prop.available && (
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur border-t border-border px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+          <div className="flex items-center gap-3 max-w-7xl mx-auto">
+            <div className="min-w-0 flex-1">
+              <div className="text-base font-bold text-primary leading-tight">{fmt(prop.price)}<span className="text-xs font-normal text-muted-foreground">/nuit</span></div>
+              {nights > 0 && <div className="text-xs text-muted-foreground">{nights} nuit{nights > 1 ? "s" : ""} · {fmt(total + fees)}</div>}
+            </div>
+            <button onClick={handleBook} className="shrink-0 bg-primary text-white font-bold px-4 py-2.5 rounded-xl hover:bg-orange-700 transition-colors text-sm">
+              {nights > 0 ? "Réserver" : "Vérifier"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1833,21 +1820,24 @@ const PropertyPage = ({ navigate, property: prop, setBookingData, favorites, tog
 const BookingSteps = ({ current }: { current: number }) => {
   const steps = ["Dates", "Informations", "Récapitulatif", "Paiement", "Confirmation"];
   return (
-    <div className="flex items-center justify-center gap-0 mb-10">
-      {steps.map((s, i) => (
-        <div key={s} className="flex items-center">
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors
-            ${i + 1 === current ? "bg-primary text-white" :
-              i + 1 < current ? "bg-secondary text-white" : "bg-muted text-muted-foreground"}`}>
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
-              ${i + 1 < current ? "bg-white/20" : i + 1 === current ? "bg-white/20" : "bg-white/0"}`}>
-              {i + 1 < current ? <Check size={12} /> : i + 1}
-            </span>
-            <span className="hidden sm:block">{s}</span>
+    <div className="mb-8 sm:mb-10">
+      <div className="flex items-center justify-start sm:justify-center gap-1 overflow-x-auto pb-2 scrollbar-none -mx-1 px-1">
+        {steps.map((s, i) => (
+          <div key={s} className="flex items-center shrink-0">
+            <div className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors
+              ${i + 1 === current ? "bg-primary text-white" :
+                i + 1 < current ? "bg-secondary text-white" : "bg-muted text-muted-foreground"}`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0
+                ${i + 1 <= current ? "bg-white/20" : "bg-white/0"}`}>
+                {i + 1 < current ? <Check size={12} /> : i + 1}
+              </span>
+              <span className="whitespace-nowrap">{s}</span>
+            </div>
+            {i < steps.length - 1 && <div className={`w-3 sm:w-6 h-0.5 shrink-0 ${i + 1 < current ? "bg-secondary" : "bg-border"}`} />}
           </div>
-          {i < steps.length - 1 && <div className={`w-6 sm:w-10 h-0.5 ${i + 1 < current ? "bg-secondary" : "bg-border"}`} />}
-        </div>
-      ))}
+        ))}
+      </div>
+      <p className="text-center text-xs text-muted-foreground sm:hidden">Étape {current} sur {steps.length}</p>
     </div>
   );
 };
@@ -1872,7 +1862,7 @@ const BookingDatesPage = ({ navigate, property: prop, bookingData, setBookingDat
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24">
       <BookingSteps current={1} />
       <h1 className="text-2xl font-bold text-foreground mb-1">Sélectionnez vos dates</h1>
       <p className="text-muted-foreground mb-6 text-sm">{prop.name} — {prop.city}</p>
@@ -1952,7 +1942,7 @@ const BookingInfoPage = ({ navigate, bookingData, setBookingData }: {
   const valid = form.firstName && form.lastName && form.email && form.phone && form.idNumber;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24">
       <BookingSteps current={2} />
       <h1 className="text-2xl font-bold text-foreground mb-1">Vos informations</h1>
       <p className="text-muted-foreground mb-6 text-sm">Ces informations sont nécessaires pour valider votre réservation</p>
@@ -2020,7 +2010,7 @@ const BookingSummaryPage = ({ navigate, bookingData }: { navigate: (p: Page) => 
   const bd = bookingData;
   const pct = typeof bd.feePct === "number" ? clampPct(bd.feePct) : 5;
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24">
       <BookingSteps current={3} />
       <h1 className="text-2xl font-bold text-foreground mb-1">Récapitulatif</h1>
       <p className="text-muted-foreground mb-6 text-sm">Vérifiez les détails de votre réservation</p>
@@ -2038,7 +2028,7 @@ const BookingSummaryPage = ({ navigate, bookingData }: { navigate: (p: Page) => 
               </div>
             </div>
           </div>
-          <div className="border-t border-border grid grid-cols-3 divide-x divide-border">
+          <div className="border-t border-border grid grid-cols-1 sm:grid-cols-3 sm:divide-x divide-border">
             {[
               { label: "Arrivée", value: bd.checkIn || "—" },
               { label: "Départ", value: bd.checkOut || "—" },
@@ -2120,7 +2110,7 @@ const BookingPaymentPage = ({ navigate, bookingData, setBookingData }: {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24">
       <BookingSteps current={4} />
       <h1 className="text-2xl font-bold text-foreground mb-1">Paiement</h1>
       <p className="text-muted-foreground mb-6 text-sm">Choisissez votre moyen de paiement</p>
@@ -2187,7 +2177,7 @@ const BookingPaymentPage = ({ navigate, bookingData, setBookingData }: {
               <input value={cardName} onChange={e => setCardName(e.target.value)} placeholder="KOUAMÉ ADJOBI"
                 className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary uppercase" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-semibold text-foreground block mb-1.5">Expiration</label>
                 <input value={cardExp} onChange={e => setCardExp(e.target.value)} placeholder="MM/AA"
@@ -2467,7 +2457,7 @@ const RegisterPage = ({ navigate, setUser }: { navigate: (p: Page) => void; setU
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-semibold text-foreground block mb-1.5">Prénom *</label>
               <input value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} placeholder="Kouamé"
@@ -2907,7 +2897,7 @@ const DashboardPage = ({ navigate, user, setUser, activeSub, favorites, toggleFa
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-muted/50 via-background to-muted/30">
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex gap-8">
+        <div className="flex flex-col md:flex-row gap-6 md:gap-8">
           <aside className="w-64 shrink-0 hidden md:block">
             <div className="bg-card border border-border rounded-2xl overflow-hidden sticky top-24 shadow-sm">
               <div className="p-5 bg-gradient-to-br from-[#14261A] to-[#0A2918] text-white">
@@ -3115,7 +3105,7 @@ const AdminDashboard = ({ navigate, reservations, properties }: { navigate: (p: 
         </button>
       </AdminPageHeader>
 
-      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {stats.map(({ label, value, change, icon: Icon, color }) => (
           <div key={label} className="bg-card border border-border rounded-2xl p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-3">
@@ -3492,7 +3482,7 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
                 </div>
               </AdminFormField>
               {uploadedUrls.length > 0 && (
-                <div className="grid grid-cols-4 gap-2 -mt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 -mt-2">
                   {uploadedUrls.slice(0, MAX_PROPERTY_IMAGES).map((u, idx) => (
                     <div key={`${u.slice(0, 24)}-${idx}`} className="relative">
                       <img src={u} alt={`Aperçu ${idx + 1}`} className="w-full h-16 object-cover rounded-lg border border-border bg-muted" />
@@ -3555,9 +3545,32 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+      <div className="md:hidden space-y-3">
+        {filtered.map(p => (
+          <div key={p.id} className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+            <div className="flex gap-3">
+              <img src={p.image} alt={p.name} className="w-14 h-14 rounded-xl object-cover bg-muted shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-foreground line-clamp-2">{p.name}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{p.city} · {p.type}</div>
+                <div className="text-sm font-bold text-primary mt-1">{fmt(p.price)}<span className="text-xs font-normal text-muted-foreground">/n</span></div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+              <button onClick={() => toggleAvailability(p.id)} className="hover:opacity-80"><StatusBadge status={p.available ? "available" : "unavailable"} /></button>
+              <div className="flex gap-2">
+                <button onClick={() => navigate("property", { property: p })} className="w-9 h-9 bg-green-50 text-green-600 rounded-lg flex items-center justify-center"><Eye size={15} /></button>
+                <button onClick={() => openEdit(p)} className="w-9 h-9 bg-orange-50 text-primary rounded-lg flex items-center justify-center"><Edit2 size={15} /></button>
+                <button onClick={() => setDeleteId(p.id)} className="w-9 h-9 bg-red-50 text-red-600 rounded-lg flex items-center justify-center"><Trash2 size={15} /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden md:block bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[36rem]">
+        <table className="w-full text-sm">
           <thead className="bg-muted border-b border-border">
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Bien</th>
@@ -3640,9 +3653,35 @@ const AdminReservationsPage = ({ reservations, setReservations, notify }: {
         ))}
       </div>
 
-      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+      <div className="md:hidden space-y-3">
+        {filtered.map(r => (
+          <div key={r.id} onClick={() => setSelected(r)} className="bg-card border border-border rounded-2xl p-4 shadow-sm cursor-pointer active:bg-muted/50">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-mono text-xs text-muted-foreground">{r.id}</div>
+                <div className="font-semibold text-foreground mt-0.5 line-clamp-2">{r.property}</div>
+                <div className="text-xs text-muted-foreground mt-1">{r.checkIn} → {r.checkOut}</div>
+              </div>
+              <StatusBadge status={r.status} />
+            </div>
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+              <span className="font-bold text-primary">{fmt(r.total)}</span>
+              {r.status === "pending" && (
+                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => { setReservations(prev => prev.map(x => x.id === r.id ? { ...x, status: "confirmed" } : x)); notify("Réservation confirmée"); }}
+                    className="px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-semibold">Confirmer</button>
+                  <button onClick={() => { setReservations(prev => prev.map(x => x.id === r.id ? { ...x, status: "cancelled" } : x)); notify("Réservation annulée"); }}
+                    className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-semibold">Annuler</button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden md:block bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[40rem]">
+        <table className="w-full text-sm">
           <thead className="bg-muted border-b border-border">
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Référence</th>
@@ -3783,9 +3822,33 @@ const AdminUsersPage = ({ users, setUsers, notify }: {
   return (
   <div className="p-4 sm:p-6 lg:p-8 space-y-6">
     <AdminPageHeader title="Gestion des utilisateurs" subtitle={`${users.length} comptes enregistrés`} />
-    <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+    <div className="md:hidden space-y-3">
+      {users.map(u => (
+        <div key={u.id} className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0">{u.name.charAt(0)}</div>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-foreground">{u.name}</div>
+              <div className="text-xs text-muted-foreground truncate">{u.email}</div>
+            </div>
+            <StatusBadge status={u.status} />
+          </div>
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-border text-sm">
+            <Badge label={u.role === "admin" ? "Admin" : "Client"} color={u.role === "admin" ? "orange" : "gray"} />
+            <div className="flex gap-2">
+              <button onClick={() => setSelected(u)} className="w-9 h-9 bg-orange-50 text-primary rounded-lg flex items-center justify-center"><Eye size={15} /></button>
+              {u.status === "active" ?
+                <button onClick={() => toggleStatus(u.id)} className="w-9 h-9 bg-yellow-50 text-yellow-600 rounded-lg flex items-center justify-center"><XCircle size={15} /></button> :
+                <button onClick={() => toggleStatus(u.id)} className="w-9 h-9 bg-green-50 text-green-600 rounded-lg flex items-center justify-center"><CheckCircle size={15} /></button>
+              }
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+    <div className="hidden md:block bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
-      <table className="w-full text-sm min-w-[36rem]">
+      <table className="w-full text-sm">
         <thead className="bg-muted border-b border-border">
           <tr>
             <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Utilisateur</th>
@@ -3863,7 +3926,7 @@ const AdminPaymentsPage = ({ notify }: { notify: NotifyFn }) => {
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Gestion des paiements" subtitle="Suivi des transactions" />
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Total encaissé", value: "48,7M FCFA", color: "text-secondary" },
           { label: "En attente", value: "3", color: "text-yellow-600" },
@@ -3876,9 +3939,31 @@ const AdminPaymentsPage = ({ notify }: { notify: NotifyFn }) => {
           </div>
         ))}
       </div>
-      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+      <div className="md:hidden space-y-3">
+        {payments.map(p => (
+          <div key={p.ref} className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-mono text-xs text-muted-foreground">{p.ref}</div>
+                <div className="font-medium text-foreground mt-0.5">{p.user}</div>
+                <div className="text-xs text-muted-foreground line-clamp-1">{p.property}</div>
+              </div>
+              <StatusBadge status={p.status === "refunded" ? "cancelled" : p.status} />
+            </div>
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+              <div>
+                <div className="font-bold text-primary">{fmt(p.amount)}</div>
+                <div className="text-xs text-muted-foreground">{p.method} · {p.date}</div>
+              </div>
+              <button onClick={() => { printReceiptByRef({ ref: p.ref, property: p.property, total: p.amount, client: p.user }); notify("Reçu téléchargé"); }}
+                className="w-9 h-9 bg-green-50 text-green-600 rounded-lg flex items-center justify-center"><Download size={15} /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="hidden md:block bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[32rem]">
+        <table className="w-full text-sm">
           <thead className="bg-muted border-b border-border">
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Référence</th>
@@ -3965,7 +4050,7 @@ const AdminMaintenancePage = ({ tickets, setTickets, notify }: {
 
       <div className="space-y-3">
         {tickets.map(t => (
-          <div key={t.id} className="bg-card border border-border rounded-2xl p-5 flex items-start justify-between gap-4 hover:shadow-sm transition-shadow">
+          <div key={t.id} className="bg-card border border-border rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 hover:shadow-sm transition-shadow">
             <div className="flex items-start gap-3">
               <div className={`w-2.5 h-2.5 rounded-full mt-2 shrink-0 ${t.priority === "high" ? "bg-red-500" : t.priority === "medium" ? "bg-yellow-500" : "bg-green-500"}`} />
               <div>
@@ -4189,7 +4274,7 @@ const AboutPage = ({ navigate }: { navigate: (p: Page) => void }) => (
             <p>Créée par décret présidentiel, SONAPIE est l'opérateur officiel chargé de la gestion et de la mise en valeur du patrimoine immobilier appartenant à l'État de Côte d'Ivoire.</p>
             <p>Notre mission : rendre accessibles et rentables les propriétés nationales, en particulier les villas, résidences officielles, hôtels et espaces événementiels répartis sur l'ensemble du territoire.</p>
           </div>
-          <div className="grid grid-cols-3 gap-4 mt-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
             {[{ value: "127", label: "Biens gérés" }, { value: "25ans", label: "d'expérience" }, { value: "8", label: "Destinations phares" }].map(({ value, label }) => (
               <div key={label} className="text-center bg-muted rounded-xl p-4">
                 <div className="text-2xl font-bold text-primary">{value}</div>
@@ -4349,7 +4434,7 @@ const ContactPage = ({ navigate, complaints, setComplaints }: {
             </div>
           ) : (
             <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-semibold text-foreground block mb-1.5">Prénom</label>
                   <input placeholder="Kouamé" className="w-full bg-input-background border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary" />
