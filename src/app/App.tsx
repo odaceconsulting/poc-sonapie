@@ -24,10 +24,13 @@ import {
   CheckCircle, XCircle, Clock, Edit2, Trash2, Plus, Eye,
   TrendingUp, Shield, Award, Globe, Facebook, Twitter,
   Instagram, Youtube, ChevronRight, ChevronLeft, X, Menu,
-  Check, ArrowLeft, Upload, Home, Bookmark, List, Map,
+  Check, ArrowLeft, Upload, Home, Bookmark, List, Map as MapIcon,
   Camera, Info, HelpCircle, FileText, Zap, RefreshCw,
-  Download, MessageCircle, Lock, UserPlus, Key, ShieldCheck
+  Download, MessageCircle, Lock, UserPlus, Key, ShieldCheck, Plug
 } from "lucide-react";
+import { AdminIntegrationsPage } from "./pages/admin/AdminIntegrationsPage";
+import { AdminIntegrationDetailPage, type PropertyLike } from "./pages/admin/AdminIntegrationDetailPage";
+import { getRecentSyncErrors } from "./lib/integrations/syncService";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Page =
@@ -41,6 +44,7 @@ type Page =
   | "admin" | "admin-properties" | "admin-reservations"
   | "admin-users" | "admin-payments" | "admin-maintenance"
   | "admin-claims"   | "admin-stats" | "admin-settings" | "admin-verify"
+  | "admin-integrations" | "admin-integration-detail"
   | "about" | "contact" | "verify";
 
 interface CatalogueFilters {
@@ -159,6 +163,207 @@ const ADMIN_STATS = {
     { city: "Séguéla", count: 42, revenue: 1600000 },
     { city: "Katiola", count: 40, revenue: 1400000 },
   ],
+};
+
+type AdminPeriodPreset = "all" | "7d" | "30d" | "90d" | "180d" | "365d" | "custom";
+
+type AdminStatsFilters = {
+  period: AdminPeriodPreset;
+  dateFrom: string;
+  dateTo: string;
+  city: string;
+  propertyType: string;
+  status: string;
+  search: string;
+};
+
+const DEFAULT_ADMIN_STATS_FILTERS: AdminStatsFilters = {
+  period: "all",
+  dateFrom: "",
+  dateTo: "",
+  city: "Toutes",
+  propertyType: "Toutes catégories",
+  status: "all",
+  search: "",
+};
+
+const FR_MONTHS: Record<string, number> = {
+  Jan: 0, Fév: 1, Feb: 1, Mar: 2, Avr: 3, Mai: 4, Jun: 5, Juin: 5, Juil: 6, Aoû: 7, Sep: 8, Oct: 9, Nov: 10, Déc: 11,
+};
+
+const parseFrShortDate = (str: string): Date | null => {
+  const m = str.trim().match(/^(\d{1,2})\s+(\S+)\s+(\d{4})$/);
+  if (!m) return null;
+  const month = FR_MONTHS[m[2]] ?? FR_MONTHS[m[2].slice(0, 3)];
+  if (month === undefined) return null;
+  return new Date(+m[3], month, +m[1]);
+};
+
+const getAdminPeriodRange = (filters: AdminStatsFilters): { from: Date | null; to: Date | null } => {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  if (filters.period === "custom") {
+    return {
+      from: filters.dateFrom ? new Date(filters.dateFrom) : null,
+      to: filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null,
+    };
+  }
+  if (filters.period === "all") return { from: null, to: null };
+  const days: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90, "180d": 180, "365d": 365 };
+  const from = new Date();
+  from.setDate(from.getDate() - (days[filters.period] ?? 30));
+  from.setHours(0, 0, 0, 0);
+  return { from, to: today };
+};
+
+const adminFiltersActive = (filters: AdminStatsFilters) =>
+  filters.period !== "all" ||
+  filters.dateFrom !== "" ||
+  filters.dateTo !== "" ||
+  filters.city !== "Toutes" ||
+  filters.propertyType !== "Toutes catégories" ||
+  filters.status !== "all" ||
+  filters.search.trim() !== "";
+
+const applyAdminStatsFilters = (items: Reservation[], filters: AdminStatsFilters): Reservation[] => {
+  const { from, to } = getAdminPeriodRange(filters);
+  const q = filters.search.trim().toLowerCase();
+  return items.filter(r => {
+    const d = parseFrShortDate(r.checkIn);
+    if (from && d && d < from) return false;
+    if (to && d && d > to) return false;
+    if (filters.city !== "Toutes" && r.city !== filters.city) return false;
+    if (filters.propertyType !== "Toutes catégories" && r.type !== filters.propertyType) return false;
+    if (filters.status !== "all" && r.status !== filters.status) return false;
+    if (q && ![r.id, r.property, r.client, r.city, r.type].some(x => x?.toLowerCase().includes(q))) return false;
+    return true;
+  });
+};
+
+const ANALYTICS_RESERVATIONS: Reservation[] = [
+  ...MOCK_RESERVATIONS,
+  { id: "RES-2025-003", propertyId: "sonapie-3", property: "HEDEN Golf Hôtel", city: "Abidjan", checkIn: "1 Jan 2025", checkOut: "4 Jan 2025", total: 114000, status: "completed", type: "Hôtel", guests: 2, client: "Jean Kouassi" },
+  { id: "RES-2025-004", propertyId: "sonapie-6", property: "Hôtel de la Paix", city: "Daoukro", checkIn: "12 Jan 2025", checkOut: "15 Jan 2025", total: 96000, status: "confirmed", type: "Hôtel", guests: 2, client: "Marie Traoré" },
+  { id: "RES-2025-005", propertyId: "sonapie-7", property: "Hôtel Carrefour", city: "Séguéla", checkIn: "20 Jan 2025", checkOut: "23 Jan 2025", total: 87000, status: "pending", type: "Hôtel", guests: 3, client: "Ibrahim Koné" },
+  { id: "RES-2025-006", propertyId: "sonapie-8", property: "Hôtel Hambol", city: "Katiola", checkIn: "28 Jan 2025", checkOut: "31 Jan 2025", total: 78000, status: "confirmed", type: "Hôtel", guests: 2, client: "Awa Sanogo" },
+  { id: "RES-2024-101", propertyId: "sonapie-1", property: "Sofitel Hôtel Ivoire", city: "Abidjan", checkIn: "5 Nov 2024", checkOut: "10 Nov 2024", total: 375000, status: "completed", type: "Hôtel", guests: 2, client: "Paul N'Guessan" },
+  { id: "RES-2024-102", propertyId: "sonapie-4", property: "Hôtel Président", city: "Yamoussoukro", checkIn: "18 Nov 2024", checkOut: "22 Nov 2024", total: 192000, status: "completed", type: "Hôtel", guests: 4, client: "Clarisse Brou" },
+  { id: "RES-2024-103", propertyId: "sonapie-2", property: "Ivoire Golf Club", city: "Abidjan", checkIn: "2 Oct 2024", checkOut: "6 Oct 2024", total: 168000, status: "completed", type: "Complexe / Golf Club", guests: 6, client: "Moussa Diarra" },
+  { id: "RES-2024-104", propertyId: "sonapie-5", property: "HP Resort", city: "Yamoussoukro", checkIn: "14 Sep 2024", checkOut: "21 Sep 2024", total: 595000, status: "completed", type: "Resort", guests: 4, client: "Nadia Ouattara" },
+  { id: "RES-2024-105", propertyId: "sonapie-6", property: "Hôtel de la Paix", city: "Daoukro", checkIn: "8 Aoû 2024", checkOut: "11 Aoû 2024", total: 96000, status: "cancelled", type: "Hôtel", guests: 2, client: "Yao Kouadio" },
+  { id: "RES-2024-106", propertyId: "sonapie-7", property: "Hôtel Carrefour", city: "Séguéla", checkIn: "25 Jul 2024", checkOut: "28 Jul 2024", total: 87000, status: "completed", type: "Hôtel", guests: 2, client: "Fatou Camara" },
+  { id: "RES-2024-107", propertyId: "sonapie-8", property: "Hôtel Hambol", city: "Katiola", checkIn: "3 Jun 2024", checkOut: "7 Jun 2024", total: 104000, status: "completed", type: "Hôtel", guests: 3, client: "Koffi Assi" },
+  { id: "RES-2024-108", propertyId: "sonapie-3", property: "HEDEN Golf Hôtel", city: "Abidjan", checkIn: "15 Mai 2024", checkOut: "18 Mai 2024", total: 114000, status: "completed", type: "Hôtel", guests: 2, client: "Aminata Coulibaly" },
+];
+
+const mergeAnalyticsReservations = (live: Reservation[]): Reservation[] => {
+  const ids = new Set(live.map(r => r.id));
+  return [...live, ...ANALYTICS_RESERVATIONS.filter(r => !ids.has(r.id))];
+};
+
+const fmtCompact = (n: number) =>
+  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(".", ",")}M FCFA` : fmt(n);
+
+type ComputedAdminMetrics = {
+  filtered: Reservation[];
+  revenue: number;
+  reservationCount: number;
+  pendingCount: number;
+  cancelledCount: number;
+  byCity: { city: string; count: number; revenue: number }[];
+  byType: { type: string; count: number; pct: number }[];
+  byMonth: { month: string; revenue: number; pct: number }[];
+  occupancyRate: number;
+  avgStayNights: number;
+  cancellationRate: number;
+};
+
+const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+const computeAdminMetrics = (reservations: Reservation[], filters: AdminStatsFilters, properties: Property[]): ComputedAdminMetrics => {
+  const all = mergeAnalyticsReservations(reservations);
+  const filtered = applyAdminStatsFilters(all, filters);
+  const active = filtered.filter(r => r.status !== "cancelled");
+  const revenue = active.reduce((s, r) => s + r.total, 0);
+  const cancelledCount = filtered.filter(r => r.status === "cancelled").length;
+  const pendingCount = filtered.filter(r => r.status === "pending").length;
+
+  const byCity = CITIES.map(city => {
+    const cityRes = filtered.filter(r => r.city === city);
+    return {
+      city,
+      count: cityRes.length,
+      revenue: cityRes.filter(r => r.status !== "cancelled").reduce((s, r) => s + r.total, 0),
+    };
+  }).filter(c => c.count > 0);
+
+  const typeMap = new Map<string, number>();
+  filtered.forEach(r => typeMap.set(r.type, (typeMap.get(r.type) || 0) + 1));
+  const maxType = Math.max(1, ...typeMap.values());
+  const byType = [...typeMap.entries()].map(([type, count]) => ({ type, count, pct: Math.round((count / maxType) * 100) }));
+
+  const monthMap = new Map<number, number>();
+  active.forEach(r => {
+    const d = parseFrShortDate(r.checkIn);
+    if (d) monthMap.set(d.getMonth(), (monthMap.get(d.getMonth()) || 0) + r.total);
+  });
+  const maxMonthRev = Math.max(1, ...monthMap.values());
+  const byMonth = [...monthMap.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([m, rev]) => ({ month: MONTH_LABELS[m], revenue: rev, pct: Math.round((rev / maxMonthRev) * 100) }));
+
+  const nights = filtered.map(r => {
+    const a = parseFrShortDate(r.checkIn);
+    const b = parseFrShortDate(r.checkOut);
+    if (!a || !b) return 0;
+    return Math.max(0, Math.round((b.getTime() - a.getTime()) / 86400000));
+  }).filter(n => n > 0);
+  const avgStayNights = nights.length ? nights.reduce((s, n) => s + n, 0) / nights.length : 0;
+  const availableCount = properties.filter(p => p.available).length;
+  const occupancyRate = properties.length ? Math.min(100, Math.round((active.length / (properties.length * 30)) * 100)) : 0;
+  const cancellationRate = filtered.length ? Math.round((cancelledCount / filtered.length) * 1000) / 10 : 0;
+
+  return {
+    filtered,
+    revenue,
+    reservationCount: filtered.length,
+    pendingCount,
+    cancelledCount,
+    byCity,
+    byType,
+    byMonth,
+    occupancyRate: occupancyRate || 74,
+    avgStayNights: Math.round(avgStayNights * 10) / 10 || 4.2,
+    cancellationRate: cancellationRate || 8.3,
+  };
+};
+
+const exportAdminStatsCsv = (metrics: ComputedAdminMetrics, filters: AdminStatsFilters) => {
+  const lines = [
+    "SONAPIE — Export statistiques admin",
+    `Période;${filters.period}`,
+    `Du;${filters.dateFrom || "—"}`,
+    `Au;${filters.dateTo || "—"}`,
+    `Ville;${filters.city}`,
+    `Type;${filters.propertyType}`,
+    `Statut;${filters.status}`,
+    "",
+    "Indicateur;Valeur",
+    `Réservations;${metrics.reservationCount}`,
+    `Revenus;${metrics.revenue}`,
+    `En attente;${metrics.pendingCount}`,
+    `Annulations;${metrics.cancelledCount}`,
+    "",
+    "Ville;Réservations;Revenus",
+    ...metrics.byCity.map(c => `${c.city};${c.count};${c.revenue}`),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `sonapie-stats-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 };
 
 const INITIAL_MAINTENANCE_TICKETS: MaintenanceTicket[] = [
@@ -444,6 +649,13 @@ const StatusBadge = ({ status }: { status: string }) => {
     available: { label: "Disponible", color: "green" },
     unavailable: { label: "Indisponible", color: "red" },
     maintenance: { label: "Maintenance", color: "yellow" },
+    connecté: { label: "Connecté", color: "green" },
+    "en attente": { label: "En attente", color: "yellow" },
+    erreur: { label: "Erreur", color: "red" },
+    désactivé: { label: "Désactivé", color: "gray" },
+    success: { label: "Succès", color: "green" },
+    failed: { label: "Échec", color: "red" },
+    partial: { label: "Partiel", color: "orange" },
   };
   const m = map[status] || { label: status, color: "gray" };
   return <Badge label={m.label} color={m.color} />;
@@ -523,10 +735,37 @@ const DashboardStatCard = ({ label, value, icon: Icon, accent, onClick }: {
   <button
     type="button"
     onClick={onClick}
-    className={`text-left bg-card border border-border rounded-2xl p-5 transition-all hover:shadow-md hover:border-primary/30 ${onClick ? "cursor-pointer" : "cursor-default"}`}
+    disabled={!onClick}
+    className={`text-left w-full bg-card border border-border rounded-2xl p-5 transition-all hover:shadow-md hover:border-primary/30 group ${onClick ? "cursor-pointer" : "cursor-default"}`}
   >
-    <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-3 ${accent}`}>
-      <Icon size={20} />
+    <div className="flex items-start justify-between gap-2">
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-3 ${accent}`}>
+        <Icon size={20} />
+      </div>
+      {onClick && <ChevronRight size={16} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1" />}
+    </div>
+    <div className="text-2xl font-bold text-foreground">{value}</div>
+    <div className="text-xs text-muted-foreground mt-0.5 font-medium">{label}</div>
+  </button>
+);
+
+const AdminStatCard = ({ label, value, change, icon: Icon, color, onClick }: {
+  label: string; value: string; change: string; icon: typeof Home; color: string; onClick?: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={!onClick}
+    className={`text-left w-full bg-card border border-border rounded-2xl p-5 transition-all hover:shadow-md hover:border-primary/30 group ${onClick ? "cursor-pointer" : "cursor-default"}`}
+  >
+    <div className="flex items-center justify-between mb-3">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
+        <Icon size={18} />
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${change.startsWith("-") ? "text-red-600 bg-red-50" : "text-secondary bg-green-50"}`}>{change}</span>
+        {onClick && <ChevronRight size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
+      </div>
     </div>
     <div className="text-2xl font-bold text-foreground">{value}</div>
     <div className="text-xs text-muted-foreground mt-0.5 font-medium">{label}</div>
@@ -1346,7 +1585,7 @@ const CataloguePage = ({ navigate, filters, setFilters, favorites, toggleFavorit
             onClick={() => setShowMap(!showMap)}
             className={`flex items-center gap-2 px-3 sm:px-4 py-2 border border-border rounded-lg text-sm font-medium transition-colors ${showMap ? "bg-secondary text-white border-secondary" : "hover:bg-muted"}`}
           >
-            <Map size={15} /> Carte
+            <MapIcon size={15} /> Carte
           </button>
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -2955,6 +3194,7 @@ const DashboardPage = ({ navigate, user, setUser, activeSub, favorites, toggleFa
 const ADMIN_NAV_LINKS = [
   { id: "admin", label: "Dashboard", icon: BarChart2 },
   { id: "admin-properties", label: "Biens", icon: Building2 },
+  { id: "admin-integrations", label: "Intégrations", icon: Plug },
   { id: "admin-reservations", label: "Réservations", icon: Calendar },
   { id: "admin-verify", label: "Contrôle arrivée", icon: ShieldCheck },
   { id: "admin-users", label: "Utilisateurs", icon: User },
@@ -2977,6 +3217,8 @@ const AdminTopBar = ({
   const pageLabels: Record<string, string> = {
     admin: "Tableau de bord",
     "admin-properties": "Biens",
+    "admin-integrations": "Intégrations",
+    "admin-integration-detail": "Détail intégration",
     "admin-reservations": "Réservations",
     "admin-verify": "Contrôle arrivée",
     "admin-users": "Utilisateurs",
@@ -3051,7 +3293,7 @@ const AdminSidebar = ({
             key={id}
             onClick={() => go(id)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left
-              ${activePage === id
+              ${activePage === id || (id === "admin-integrations" && activePage === "admin-integration-detail")
                 ? "bg-primary text-white shadow-md shadow-primary/30"
                 : "text-white/70 hover:bg-white/10 hover:text-white"}`}
           >
@@ -3086,49 +3328,196 @@ const AdminSidebar = ({
   );
 };
 
-const AdminDashboard = ({ navigate, reservations, properties }: { navigate: (p: Page) => void; reservations: Reservation[]; properties: Property[] }) => {
-  const stats = [
-    { label: "Revenus totaux", value: "48,7M FCFA", change: "+18.4%", icon: TrendingUp, color: "text-secondary bg-green-100" },
-    { label: "Réservations du mois", value: "342", change: "+12.1%", icon: Calendar, color: "text-primary bg-orange-100" },
-    { label: "Biens disponibles", value: `${properties.filter(p => p.available).length}`, change: "+3.2%", icon: Building2, color: "text-secondary bg-green-100" },
-    { label: "Taux d'occupation", value: "74%", change: "+5.1%", icon: BarChart2, color: "text-primary bg-orange-100" },
-    { label: "Réclamations en attente", value: "3", change: "-2", icon: AlertCircle, color: "text-yellow-600 bg-yellow-100" },
-    { label: "Utilisateurs", value: "1 842", change: "+24.8%", icon: User, color: "text-purple-600 bg-purple-100" },
+const AdminStatsFilterBar = ({
+  filters,
+  setFilters,
+  resultCount,
+  onExport,
+  compact,
+}: {
+  filters: AdminStatsFilters;
+  setFilters: (f: AdminStatsFilters | ((prev: AdminStatsFilters) => AdminStatsFilters)) => void;
+  resultCount?: number;
+  onExport?: () => void;
+  compact?: boolean;
+}) => {
+  const [expanded, setExpanded] = useState(!compact);
+  const active = adminFiltersActive(filters);
+
+  const reset = () => setFilters(DEFAULT_ADMIN_STATS_FILTERS);
+
+  return (
+    <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-4 border-b border-border bg-muted/20">
+        <div className="flex items-center gap-2 min-w-0">
+          <Filter size={18} className="text-primary shrink-0" />
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Filtres statistiques</h3>
+            {resultCount !== undefined && (
+              <p className="text-xs text-muted-foreground">{resultCount} résultat{resultCount > 1 ? "s" : ""}{active ? " (filtres actifs)" : ""}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {active && (
+            <button type="button" onClick={reset} className="text-xs font-medium text-primary hover:underline px-2 py-1">
+              Réinitialiser
+            </button>
+          )}
+          {onExport && (
+            <button type="button" onClick={onExport} className="flex items-center gap-1.5 text-xs font-semibold border border-border rounded-lg px-3 py-2 hover:bg-muted transition-colors">
+              <Download size={13} /> Exporter CSV
+            </button>
+          )}
+          {compact && (
+            <button type="button" onClick={() => setExpanded(e => !e)} className="flex items-center gap-1 text-xs font-medium border border-border rounded-lg px-3 py-2 hover:bg-muted">
+              {expanded ? "Réduire" : "Afficher"} <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {(expanded || !compact) && (
+        <div className="p-4 sm:p-5 space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-2">Période</label>
+            <div className="flex flex-wrap gap-2">
+              {([
+                { id: "all", label: "Tout" },
+                { id: "7d", label: "7 jours" },
+                { id: "30d", label: "30 jours" },
+                { id: "90d", label: "3 mois" },
+                { id: "180d", label: "6 mois" },
+                { id: "365d", label: "1 an" },
+                { id: "custom", label: "Personnalisé" },
+              ] as const).map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setFilters(f => ({ ...f, period: id }))}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${filters.period === id ? "bg-primary text-white border-primary" : "bg-muted border-border text-muted-foreground hover:border-primary/40"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <AdminFormField label="Date de début" hint={filters.period !== "custom" ? "Utilisé si période personnalisée" : undefined}>
+              <input type="date" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value, period: "custom" }))} className={inputClass} />
+            </AdminFormField>
+            <AdminFormField label="Date de fin">
+              <input type="date" value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value, period: "custom" }))} className={inputClass} />
+            </AdminFormField>
+            <AdminFormField label="Ville">
+              <select value={filters.city} onChange={e => setFilters(f => ({ ...f, city: e.target.value }))} className={selectClass}>
+                <option value="Toutes">Toutes les villes</option>
+                {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </AdminFormField>
+            <AdminFormField label="Type de bien">
+              <select value={filters.propertyType} onChange={e => setFilters(f => ({ ...f, propertyType: e.target.value }))} className={selectClass}>
+                {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </AdminFormField>
+            <AdminFormField label="Statut réservation">
+              <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))} className={selectClass}>
+                <option value="all">Tous les statuts</option>
+                <option value="confirmed">Confirmées</option>
+                <option value="pending">En attente</option>
+                <option value="completed">Terminées</option>
+                <option value="cancelled">Annulées</option>
+              </select>
+            </AdminFormField>
+            <div className="sm:col-span-2 lg:col-span-3">
+            <AdminFormField label="Recherche" hint="Référence, client, bien, ville…">
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="search"
+                  value={filters.search}
+                  onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+                  placeholder="Rechercher…"
+                  className={`${inputClass} pl-9`}
+                />
+              </div>
+            </AdminFormField>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AdminDashboard = ({ navigate, reservations, properties, adminStatsFilters, setAdminStatsFilters, notify }: {
+  navigate: (p: Page) => void;
+  reservations: Reservation[];
+  properties: Property[];
+  adminStatsFilters: AdminStatsFilters;
+  setAdminStatsFilters: (f: AdminStatsFilters | ((prev: AdminStatsFilters) => AdminStatsFilters)) => void;
+  notify: NotifyFn;
+}) => {
+  const metrics = computeAdminMetrics(reservations, adminStatsFilters, properties);
+  const useGlobal = !adminFiltersActive(adminStatsFilters);
+
+  const stats: { label: string; value: string; change: string; icon: typeof Home; color: string; page: Page }[] = [
+    { label: "Revenus totaux", value: useGlobal ? "48,7M FCFA" : fmtCompact(metrics.revenue), change: "+18.4%", icon: TrendingUp, color: "text-secondary bg-green-100", page: "admin-payments" },
+    { label: "Réservations", value: useGlobal ? "342" : String(metrics.reservationCount), change: "+12.1%", icon: Calendar, color: "text-primary bg-orange-100", page: "admin-reservations" },
+    { label: "Biens disponibles", value: `${properties.filter(p => p.available).length}`, change: "+3.2%", icon: Building2, color: "text-secondary bg-green-100", page: "admin-properties" },
+    { label: "Taux d'occupation", value: `${metrics.occupancyRate}%`, change: "+5.1%", icon: BarChart2, color: "text-primary bg-orange-100", page: "admin-stats" },
+    { label: "En attente", value: useGlobal ? "3" : String(metrics.pendingCount), change: "-2", icon: AlertCircle, color: "text-yellow-600 bg-yellow-100", page: "admin-reservations" },
+    { label: "Utilisateurs", value: "1 842", change: "+24.8%", icon: User, color: "text-purple-600 bg-purple-100", page: "admin-users" },
   ];
+
+  const cityData = useGlobal ? ADMIN_STATS.byCity : metrics.byCity;
+  const maxCityRev = Math.max(1, ...cityData.map(c => c.revenue));
+  const recentReservations = metrics.filtered.slice(0, 6);
+  const syncErrors = getRecentSyncErrors(5);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-      <AdminPageHeader title="Tableau de bord" subtitle="Vue d'ensemble — Juin 2025">
-        <button onClick={() => printReceiptByRef({ ref: "RAPPORT-2025-06", property: "Rapport mensuel SONAPIE", client: "Administration" })}
+      <AdminPageHeader title="Tableau de bord" subtitle={adminFiltersActive(adminStatsFilters) ? "Statistiques filtrées" : "Vue d'ensemble — Juin 2025"}>
+        <button onClick={() => { exportAdminStatsCsv(metrics, adminStatsFilters); notify("Export CSV téléchargé"); }}
           className="flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-orange-700 transition-colors shadow-md shadow-primary/20">
-          <Download size={14} /> Rapport PDF
+          <Download size={14} /> Exporter
         </button>
       </AdminPageHeader>
 
+      <AdminStatsFilterBar
+        filters={adminStatsFilters}
+        setFilters={setAdminStatsFilters}
+        resultCount={metrics.reservationCount}
+        onExport={() => { exportAdminStatsCsv(metrics, adminStatsFilters); notify("Export CSV téléchargé"); }}
+        compact
+      />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {stats.map(({ label, value, change, icon: Icon, color }) => (
-          <div key={label} className="bg-card border border-border rounded-2xl p-5 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
-                <Icon size={18} />
-              </div>
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${change.startsWith("-") ? "text-red-600 bg-red-50" : "text-secondary bg-green-50"}`}>{change}</span>
-            </div>
-            <div className="text-2xl font-bold text-foreground">{value}</div>
-            <div className="text-xs text-muted-foreground mt-0.5 font-medium">{label}</div>
-          </div>
+        {stats.map(({ label, value, change, icon, color, page }) => (
+          <AdminStatCard
+            key={label}
+            label={label}
+            value={value}
+            change={change}
+            icon={icon}
+            color={color}
+            onClick={() => navigate(page)}
+          />
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-card border border-border rounded-2xl p-6">
-          <h3 className="font-semibold text-foreground mb-4">Réservations récentes</h3>
+          <h3 className="font-semibold text-foreground mb-4">Réservations {adminFiltersActive(adminStatsFilters) ? "filtrées" : "récentes"}</h3>
           <div className="space-y-3">
-            {reservations.map(r => (
+            {recentReservations.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Aucune réservation pour ces critères</p>
+            ) : recentReservations.map(r => (
               <div key={r.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                 <div>
                   <div className="text-sm font-medium text-foreground">{r.property}</div>
-                  <div className="text-xs text-muted-foreground">{r.id} · {r.checkIn}</div>
+                  <div className="text-xs text-muted-foreground">{r.id} · {r.checkIn} · {r.city}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={r.status} />
@@ -3145,7 +3534,9 @@ const AdminDashboard = ({ navigate, reservations, properties }: { navigate: (p: 
         <div className="bg-card border border-border rounded-2xl p-6">
           <h3 className="font-semibold text-foreground mb-4">Revenus par destination</h3>
           <div className="space-y-3">
-            {ADMIN_STATS.byCity.map(({ city, count, revenue }) => (
+            {cityData.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Aucune donnée pour cette période</p>
+            ) : cityData.map(({ city, count, revenue }) => (
               <div key={city}>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="font-medium text-foreground">{city}</span>
@@ -3154,7 +3545,7 @@ const AdminDashboard = ({ navigate, reservations, properties }: { navigate: (p: 
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${Math.round(revenue / ADMIN_STATS.revenue * 100)}%` }}
+                    style={{ width: `${Math.round(revenue / maxCityRev * 100)}%` }}
                   />
                 </div>
               </div>
@@ -3162,6 +3553,30 @@ const AdminDashboard = ({ navigate, reservations, properties }: { navigate: (p: 
           </div>
         </div>
       </div>
+
+      {syncErrors.length > 0 && (
+        <div className="bg-card border border-red-100 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <AlertCircle size={18} className="text-red-500" /> Erreurs synchronisation PMS
+            </h3>
+            <button onClick={() => navigate("admin-integrations")} className="text-sm text-primary hover:underline flex items-center gap-1">
+              Intégrations <ArrowRight size={13} />
+            </button>
+          </div>
+          <div className="space-y-2">
+            {syncErrors.map(log => (
+              <div key={log.id} className="flex items-start justify-between gap-3 py-2 border-b border-border last:border-0 text-sm">
+                <div>
+                  <div className="font-medium text-foreground">{log.summary}</div>
+                  <div className="text-xs text-muted-foreground">{log.errors[0] || "Voir le détail"}</div>
+                </div>
+                <StatusBadge status={log.status} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -3624,35 +4039,37 @@ const AdminPropertiesPage = ({ navigate, properties, setProperties, notify }: {
   );
 };
 
-const AdminReservationsPage = ({ reservations, setReservations, notify }: {
+const AdminReservationsPage = ({ reservations, setReservations, notify, adminStatsFilters, setAdminStatsFilters }: {
   reservations: Reservation[];
   setReservations: (r: Reservation[] | ((prev: Reservation[]) => Reservation[])) => void;
   notify: NotifyFn;
+  adminStatsFilters: AdminStatsFilters;
+  setAdminStatsFilters: (f: AdminStatsFilters | ((prev: AdminStatsFilters) => AdminStatsFilters)) => void;
 }) => {
-  const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<Reservation | null>(null);
-  const all = reservations;
-  const filtered = filter === "all" ? all : all.filter(r => r.status === filter);
+  const filtered = applyAdminStatsFilters(reservations, adminStatsFilters);
+  const metrics = computeAdminMetrics(reservations, adminStatsFilters, []);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Gestion des réservations" subtitle={`${filtered.length} réservation(s)`} />
 
-      <div className="flex gap-2 flex-wrap">
-        {[
-          { id: "all", label: "Toutes" },
-          { id: "confirmed", label: "Confirmées" },
-          { id: "pending", label: "En attente" },
-          { id: "completed", label: "Terminées" },
-          { id: "cancelled", label: "Annulées" },
-        ].map(({ id, label }) => (
-          <button key={id} onClick={() => setFilter(id)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === id ? "bg-primary text-white" : "bg-card border border-border hover:bg-muted"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <AdminStatsFilterBar
+        filters={adminStatsFilters}
+        setFilters={setAdminStatsFilters}
+        resultCount={filtered.length}
+        onExport={() => { exportAdminStatsCsv(metrics, adminStatsFilters); notify("Export CSV téléchargé"); }}
+        compact
+      />
 
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 bg-muted/30 rounded-2xl border border-dashed border-border">
+          <Search size={36} className="mx-auto mb-3 text-muted-foreground/30" />
+          <p className="font-medium text-foreground">Aucune réservation pour ces critères</p>
+          <p className="text-sm text-muted-foreground mt-1">Modifiez les filtres ou réinitialisez la recherche</p>
+        </div>
+      ) : (
+      <>
       <div className="md:hidden space-y-3">
         {filtered.map(r => (
           <div key={r.id} onClick={() => setSelected(r)} className="bg-card border border-border rounded-2xl p-4 shadow-sm cursor-pointer active:bg-muted/50">
@@ -3731,6 +4148,8 @@ const AdminReservationsPage = ({ reservations, setReservations, notify }: {
         </table>
         </div>
       </div>
+      </>
+      )}
 
       {selected && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
@@ -3915,28 +4334,54 @@ const AdminUsersPage = ({ users, setUsers, notify }: {
   );
 };
 
-const AdminPaymentsPage = ({ notify }: { notify: NotifyFn }) => {
-  const payments = [
-    { ref: "PAY-2025-001", user: "Kouamé Adjobi", property: "Sofitel Hôtel Ivoire", method: "Orange Money", amount: 525000, date: "15 Jan 2025", status: "completed" },
-    { ref: "PAY-2025-002", user: "Aminata Coulibaly", property: "Hôtel Président", method: "Wave", amount: 144000, date: "2 Fév 2025", status: "pending" },
-    { ref: "PAY-2024-087", user: "Serge Bamba", property: "Résidence Yamoussoukro", method: "Carte bancaire", amount: 475000, date: "18 Mar 2024", status: "completed" },
-    { ref: "PAY-2024-062", user: "Fatou Diallo", property: "Complexe San Pedro", method: "MTN Money", amount: 525000, date: "10 Déc 2024", status: "refunded" },
+const AdminPaymentsPage = ({ navigate, notify, adminStatsFilters, setAdminStatsFilters }: {
+  navigate: (p: Page) => void;
+  notify: NotifyFn;
+  adminStatsFilters: AdminStatsFilters;
+  setAdminStatsFilters: (f: AdminStatsFilters | ((prev: AdminStatsFilters) => AdminStatsFilters)) => void;
+}) => {
+  const allPayments = [
+    { ref: "PAY-2025-001", user: "Kouamé Adjobi", property: "Sofitel Hôtel Ivoire", city: "Abidjan", method: "Orange Money", amount: 525000, date: "15 Jan 2025", status: "completed" },
+    { ref: "PAY-2025-002", user: "Aminata Coulibaly", property: "Hôtel Président", city: "Yamoussoukro", method: "Wave", amount: 144000, date: "2 Fév 2025", status: "pending" },
+    { ref: "PAY-2024-087", user: "Serge Bamba", property: "Résidence Yamoussoukro", city: "Yamoussoukro", method: "Carte bancaire", amount: 475000, date: "18 Mar 2024", status: "completed" },
+    { ref: "PAY-2024-062", user: "Fatou Diallo", property: "Complexe San Pedro", city: "Abidjan", method: "MTN Money", amount: 525000, date: "10 Déc 2024", status: "refunded" },
   ];
+
+  const payments = allPayments.filter(p => {
+    const pseudoRes: Reservation = { id: p.ref, propertyId: "", property: p.property, city: p.city, checkIn: p.date, checkOut: p.date, total: p.amount, status: p.status === "refunded" ? "cancelled" : p.status, type: "Hôtel", guests: 1, client: p.user };
+    return applyAdminStatsFilters([pseudoRes], adminStatsFilters).length > 0;
+  });
+
+  const totalEncaisse = payments.filter(p => p.status === "completed").reduce((s, p) => s + p.amount, 0);
+  const pendingCount = payments.filter(p => p.status === "pending").length;
+  const refundedTotal = payments.filter(p => p.status === "refunded").reduce((s, p) => s + p.amount, 0);
+  const monthTotal = payments.reduce((s, p) => s + (p.status === "completed" ? p.amount : 0), 0);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <AdminPageHeader title="Gestion des paiements" subtitle="Suivi des transactions" />
+
+      <AdminStatsFilterBar filters={adminStatsFilters} setFilters={setAdminStatsFilters} resultCount={payments.length} compact />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Total encaissé", value: "48,7M FCFA", color: "text-secondary" },
-          { label: "En attente", value: "3", color: "text-yellow-600" },
-          { label: "Remboursements", value: "525k FCFA", color: "text-red-500" },
-          { label: "Ce mois", value: "12,4M FCFA", color: "text-primary" },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-            <div className={`text-xl font-bold ${color}`}>{value}</div>
+          { label: "Total encaissé", value: fmtCompact(totalEncaisse), color: "text-secondary", page: "admin-stats" as Page },
+          { label: "En attente", value: String(pendingCount), color: "text-yellow-600", page: "admin-reservations" as Page },
+          { label: "Remboursements", value: fmtCompact(refundedTotal), color: "text-red-500", page: "admin-payments" as Page },
+          { label: "Période filtrée", value: fmtCompact(monthTotal), color: "text-primary", page: "admin-stats" as Page },
+        ].map(({ label, value, color, page }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => navigate(page)}
+            className="text-left bg-card border border-border rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-primary/30 transition-all group"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className={`text-xl font-bold ${color}`}>{value}</div>
+              <ChevronRight size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1" />
+            </div>
             <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
-          </div>
+          </button>
         ))}
       </div>
       <div className="md:hidden space-y-3">
@@ -4136,21 +4581,74 @@ const AdminClaimsPage = ({ claims, setClaims, notify }: {
   );
 };
 
-const AdminStatsPage = () => (
+const AdminStatsPage = ({ reservations, properties, adminStatsFilters, setAdminStatsFilters, notify }: {
+  reservations: Reservation[];
+  properties: Property[];
+  adminStatsFilters: AdminStatsFilters;
+  setAdminStatsFilters: (f: AdminStatsFilters | ((prev: AdminStatsFilters) => AdminStatsFilters)) => void;
+  notify: NotifyFn;
+}) => {
+  const metrics = computeAdminMetrics(reservations, adminStatsFilters, properties);
+  const useGlobal = !adminFiltersActive(adminStatsFilters);
+
+  const monthlyData = useGlobal
+    ? [
+        { month: "Janvier", revenue: 8200000, pct: 68 },
+        { month: "Février", revenue: 6500000, pct: 54 },
+        { month: "Mars", revenue: 9800000, pct: 82 },
+        { month: "Avril", revenue: 7300000, pct: 61 },
+        { month: "Mai", revenue: 11400000, pct: 95 },
+        { month: "Juin", revenue: 12000000, pct: 100 },
+      ]
+    : metrics.byMonth;
+
+  const typeData = useGlobal
+    ? [
+        { type: "Villa", count: 28, pct: 82 },
+        { type: "Hôtel", count: 35, pct: 100 },
+        { type: "Résidence", count: 22, pct: 63 },
+        { type: "Espace événementiel", count: 18, pct: 51 },
+        { type: "Resort", count: 14, pct: 40 },
+      ]
+    : metrics.byType;
+
+  return (
   <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-    <AdminPageHeader title="Statistiques" subtitle="Analyses et indicateurs de performance" />
+    <AdminPageHeader title="Statistiques" subtitle={adminFiltersActive(adminStatsFilters) ? `${metrics.reservationCount} réservations · ${fmtCompact(metrics.revenue)}` : "Analyses et indicateurs de performance"}>
+      <button onClick={() => { exportAdminStatsCsv(metrics, adminStatsFilters); notify("Export CSV téléchargé"); }}
+        className="flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-orange-700 transition-colors shadow-md shadow-primary/20">
+        <Download size={14} /> Exporter CSV
+      </button>
+    </AdminPageHeader>
+
+    <AdminStatsFilterBar
+      filters={adminStatsFilters}
+      setFilters={setAdminStatsFilters}
+      resultCount={metrics.reservationCount}
+      onExport={() => { exportAdminStatsCsv(metrics, adminStatsFilters); notify("Export CSV téléchargé"); }}
+    />
+
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {[
+        { label: "Revenus", value: useGlobal ? "48,7M" : fmtCompact(metrics.revenue).replace(" FCFA", "") },
+        { label: "Réservations", value: useGlobal ? "342" : String(metrics.reservationCount) },
+        { label: "Occupation", value: `${metrics.occupancyRate}%` },
+        { label: "Annulations", value: `${metrics.cancellationRate}%` },
+      ].map(({ label, value }) => (
+        <div key={label} className="bg-card border border-border rounded-xl p-4 text-center">
+          <div className="text-xl font-bold text-primary">{value}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
+        </div>
+      ))}
+    </div>
+
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div className="bg-card border border-border rounded-xl p-5">
-        <h3 className="font-semibold text-foreground mb-4">Revenus mensuels (2025)</h3>
+        <h3 className="font-semibold text-foreground mb-4">Revenus mensuels</h3>
         <div className="space-y-3">
-          {[
-            { month: "Janvier", revenue: 8200000, pct: 68 },
-            { month: "Février", revenue: 6500000, pct: 54 },
-            { month: "Mars", revenue: 9800000, pct: 82 },
-            { month: "Avril", revenue: 7300000, pct: 61 },
-            { month: "Mai", revenue: 11400000, pct: 95 },
-            { month: "Juin", revenue: 12000000, pct: 100 },
-          ].map(({ month, revenue, pct }) => (
+          {monthlyData.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Aucune donnée</p>
+          ) : monthlyData.map(({ month, revenue, pct }) => (
             <div key={month}>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-foreground font-medium">{month}</span>
@@ -4167,17 +4665,13 @@ const AdminStatsPage = () => (
       <div className="bg-card border border-border rounded-xl p-5">
         <h3 className="font-semibold text-foreground mb-4">Répartition par type de bien</h3>
         <div className="space-y-3">
-          {[
-            { type: "Villa", count: 28, pct: 82 },
-            { type: "Hôtel", count: 35, pct: 100 },
-            { type: "Résidence", count: 22, pct: 63 },
-            { type: "Espace événementiel", count: 18, pct: 51 },
-            { type: "Resort", count: 14, pct: 40 },
-          ].map(({ type, count, pct }) => (
+          {typeData.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Aucune donnée</p>
+          ) : typeData.map(({ type, count, pct }) => (
             <div key={type}>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-foreground font-medium">{type}</span>
-                <span className="text-muted-foreground">{count} réservations</span>
+                <span className="text-muted-foreground">{count} réservation{count > 1 ? "s" : ""}</span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div className="h-full bg-secondary rounded-full" style={{ width: `${pct}%` }} />
@@ -4209,10 +4703,10 @@ const AdminStatsPage = () => (
         <h3 className="font-semibold text-foreground mb-4">Indicateurs clés</h3>
         <div className="grid grid-cols-2 gap-4">
           {[
-            { label: "Taux d'occupation", value: "74%", trend: "↑" },
-            { label: "Durée moy. séjour", value: "4.2 nuits", trend: "↑" },
+            { label: "Taux d'occupation", value: `${metrics.occupancyRate}%`, trend: "↑" },
+            { label: "Durée moy. séjour", value: `${metrics.avgStayNights} nuits`, trend: "↑" },
             { label: "Note moyenne", value: "4.7/5", trend: "=" },
-            { label: "Taux d'annulation", value: "8.3%", trend: "↓" },
+            { label: "Taux d'annulation", value: `${metrics.cancellationRate}%`, trend: "↓" },
           ].map(({ label, value, trend }) => (
             <div key={label} className="bg-muted rounded-xl p-4">
               <div className="text-xl font-bold text-foreground">{value} <span className="text-sm text-secondary">{trend}</span></div>
@@ -4223,7 +4717,8 @@ const AdminStatsPage = () => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // ── About & Contact ────────────────────────────────────────────────────────────
 const INSTITUTIONAL_PARTNERS = [
@@ -4607,6 +5102,7 @@ export default function App() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [catalogueFilters, setCatalogueFilters] = useState<CatalogueFilters>(DEFAULT_FILTERS);
   const [reservations, setReservations] = useState<Reservation[]>(MOCK_RESERVATIONS);
+  const [adminStatsFilters, setAdminStatsFilters] = useState<AdminStatsFilters>(DEFAULT_ADMIN_STATS_FILTERS);
   const [properties, setProperties] = useState<Property[]>(loadStoredProperties);
   const [adminUsers, setAdminUsers] = useState<MockUser[]>(MOCK_USERS);
   const [maintenanceTickets, setMaintenanceTickets] = useState<MaintenanceTicket[]>(INITIAL_MAINTENANCE_TICKETS);
@@ -4680,14 +5176,26 @@ export default function App() {
       case "login": return <LoginPage navigate={navigate} setUser={setUser} />;
       case "register": return <RegisterPage navigate={navigate} setUser={setUser} />;
       case "forgot-password": return <ForgotPasswordPage navigate={navigate} />;
-      case "admin": return <AdminDashboard navigate={navigate} reservations={reservations} properties={properties} />;
+      case "admin": return <AdminDashboard navigate={navigate} reservations={reservations} properties={properties} adminStatsFilters={adminStatsFilters} setAdminStatsFilters={setAdminStatsFilters} notify={notify} />;
       case "admin-properties": return <AdminPropertiesPage navigate={navigate} properties={properties} setProperties={setProperties} notify={notify} />;
-      case "admin-reservations": return <AdminReservationsPage reservations={reservations} setReservations={setReservations} notify={notify} />;
+      case "admin-integrations": return <AdminIntegrationsPage navigate={(p, d) => navigate(p as Page, d)} notify={notify} />;
+      case "admin-integration-detail": return (
+        <AdminIntegrationDetailPage
+          integrationId={pageData.integrationId}
+          navigate={(p, d) => navigate(p as Page, d)}
+          notify={notify}
+          properties={properties}
+          reservations={reservations}
+          setProperties={setProperties as unknown as React.Dispatch<React.SetStateAction<PropertyLike[]>>}
+          setReservations={setReservations}
+        />
+      );
+      case "admin-reservations": return <AdminReservationsPage reservations={reservations} setReservations={setReservations} notify={notify} adminStatsFilters={adminStatsFilters} setAdminStatsFilters={setAdminStatsFilters} />;
       case "admin-users": return <AdminUsersPage users={adminUsers} setUsers={setAdminUsers} notify={notify} />;
-      case "admin-payments": return <AdminPaymentsPage notify={notify} />;
+      case "admin-payments": return <AdminPaymentsPage navigate={navigate} notify={notify} adminStatsFilters={adminStatsFilters} setAdminStatsFilters={setAdminStatsFilters} />;
       case "admin-maintenance": return <AdminMaintenancePage tickets={maintenanceTickets} setTickets={setMaintenanceTickets} notify={notify} />;
       case "admin-claims": return <AdminClaimsPage claims={adminClaims} setClaims={setAdminClaims} notify={notify} />;
-      case "admin-stats": return <AdminStatsPage />;
+      case "admin-stats": return <AdminStatsPage reservations={reservations} properties={properties} adminStatsFilters={adminStatsFilters} setAdminStatsFilters={setAdminStatsFilters} notify={notify} />;
       case "admin-settings": return <AdminSettingsPage settings={platformSettings} setSettings={setPlatformSettings} notify={notify} />;
       case "admin-verify": return <AdminVerifyPage />;
       case "verify": return <VerifyReceiptPage token={pageData.verifyToken} />;
