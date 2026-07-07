@@ -1235,28 +1235,6 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
                 <HeroSearchField icon={Calendar} label="Départ" fieldClass="min-w-[9rem]">
                   <HeroDateInput value={searchCheckOut} onChange={setSearchCheckOut} min={searchCheckIn || undefined} />
                 </HeroSearchField>
-                <div className="w-px bg-border self-stretch my-3" />
-                <HeroSearchField icon={Users} label="Capacité" fieldClass="min-w-[11.5rem] flex-[1.2]">
-                  <HeroSelect
-                    value={searchCapacity}
-                    onChange={setSearchCapacity}
-                    options={[
-                      { value: "", label: "Tous les effectifs" },
-                      { value: "1-5 personnes", label: "1-5 personnes" },
-                      { value: "6-20 personnes", label: "6-20 personnes" },
-                      { value: "21-100 personnes", label: "21-100 personnes" },
-                      { value: "100+ personnes", label: "100+ personnes" },
-                    ]}
-                  />
-                </HeroSearchField>
-                <div className="w-px bg-border self-stretch my-3" />
-                <HeroSearchField icon={CreditCard} label="Budget max" fieldClass="min-w-[13.5rem] flex-[1.5]">
-                  <HeroSelect
-                    value={searchBudget}
-                    onChange={v => setSearchBudget(+v)}
-                    options={BUDGET_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
-                  />
-                </HeroSearchField>
                 <button
                   onClick={handleSearch}
                   className="shrink-0 flex items-center justify-center gap-2 bg-primary text-white font-semibold px-5 hover:bg-orange-700 transition-colors"
@@ -1289,22 +1267,6 @@ const HomePage = ({ navigate, filters, setFilters, favorites, toggleFavorite, pr
                   <div className="rounded-xl bg-muted px-3 py-2.5">
                     <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Départ</div>
                     <HeroDateInput value={searchCheckOut} onChange={setSearchCheckOut} min={searchCheckIn || undefined} />
-                  </div>
-                  <div className="rounded-xl bg-muted px-3 py-2.5">
-                    <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Capacité</div>
-                    <select className="w-full bg-transparent text-sm font-medium outline-none" value={searchCapacity} onChange={e => setSearchCapacity(e.target.value)}>
-                      <option value="">Tous</option>
-                      <option>1-5 personnes</option>
-                      <option>6-20 personnes</option>
-                      <option>21-100 personnes</option>
-                      <option>100+ personnes</option>
-                    </select>
-                  </div>
-                  <div className="rounded-xl bg-muted px-3 py-2.5">
-                    <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Budget</div>
-                    <select className="w-full bg-transparent text-sm font-medium outline-none" value={searchBudget} onChange={e => setSearchBudget(+e.target.value)}>
-                      {BUDGET_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
                   </div>
                 </div>
                 <button onClick={handleSearch} className="w-full flex items-center justify-center gap-2 bg-primary text-white font-semibold rounded-xl py-3 hover:bg-orange-700 transition-colors">
